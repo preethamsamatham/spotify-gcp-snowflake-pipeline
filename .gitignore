@@ -1,0 +1,18 @@
+# Virtual environment
+venv/
+
+# Secrets — never commit these
+.env
+*.json.key
+service-account*.json
+
+# Python cruft
+__pycache__/
+*.pyc
+
+# Local data files (raw extracts can get large)
+raw_data/
+
+# Editor/OS noise
+.vscode/
+.DS_Store
