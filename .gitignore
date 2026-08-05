@@ -5,6 +5,7 @@ venv/
 .env
 *.json.key
 service-account*.json
+.cache
 
 # Python cruft
 __pycache__/
