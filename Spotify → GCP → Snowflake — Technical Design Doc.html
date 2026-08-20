@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<!-- saved from url=(0061)file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spotify → GCP → Snowflake — Technical Design Doc</title>
+<style>
+  :root{
+    --ink:#0d1b2a;--ink-2:#1b2a3a;--paper:#f7f8fa;--card:#ffffff;--line:#e3e7ec;
+    --muted:#5b6b7c;--signal:#00b8a9;--signal-deep:#008f83;--amber:#e8a33d;
+    --violet:#7b6cf6;--rose:#e5556e;--code-bg:#0d1b2a;--code-fg:#cfe9e5;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--paper);line-height:1.6}
+  code,pre,.mono{font-family:"SF Mono",ui-monospace,"Cascadia Code","Fira Code",Menlo,Consolas,monospace}
+  header.hero{background:linear-gradient(135deg,var(--ink) 0%,var(--ink-2) 60%,#123 100%);color:#eaf2f4;padding:44px 32px 38px;border-bottom:3px solid var(--signal)}
+  .flow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font:600 12px/1 "SF Mono",ui-monospace,monospace;letter-spacing:.04em;color:var(--signal);margin-bottom:18px}
+  .flow .node{background:rgba(0,184,169,.12);border:1px solid rgba(0,184,169,.35);padding:6px 10px;border-radius:6px;white-space:nowrap;color:#bfeee8}
+  .flow .node.live{background:rgba(0,184,169,.28);border-color:var(--signal)}
+  .flow .arr{color:var(--signal);font-size:14px}
+  header.hero h1{margin:0 0 6px;font-size:30px;letter-spacing:-.02em;font-weight:750}
+  header.hero .sub{color:#9fb4c2;font-size:15px;margin:0}
+  .meta-row{display:flex;gap:26px;flex-wrap:wrap;margin-top:22px}
+  .meta-row .m{font-size:13px;color:#8fa6b6}
+  .meta-row .m b{display:block;color:#eaf2f4;font-size:14px;font-weight:600;margin-top:2px}
+  .status-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(0,184,169,.15);border:1px solid var(--signal);color:#bfeee8;padding:7px 14px;border-radius:100px;font:600 13px/1 "SF Mono",monospace;margin-top:20px}
+  .status-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--signal);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(0,184,169,.55)}70%{box-shadow:0 0 0 9px rgba(0,184,169,0)}100%{box-shadow:0 0 0 0 rgba(0,184,169,0)}}
+  .wrap{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:238px 1fr;gap:0}
+  nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;padding:26px 18px 40px;border-right:1px solid var(--line);background:#fbfcfd}
+  nav.toc .lbl{font:700 11px/1 "SF Mono",monospace;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin:18px 0 8px;padding-left:8px}
+  nav.toc a{display:block;padding:6px 10px;border-radius:6px;color:var(--ink-2);text-decoration:none;font-size:13px;border-left:2px solid transparent}
+  nav.toc a:hover{background:#eef6f5;color:var(--signal-deep);border-left-color:var(--signal)}
+  main{padding:34px 40px 90px;min-width:0}
+  section{margin-bottom:44px;scroll-margin-top:20px}
+  h2{font-size:21px;letter-spacing:-.01em;margin:0 0 4px;display:flex;align-items:center;gap:11px}
+  h2 .num{font:700 12px/1 "SF Mono",monospace;color:#fff;background:var(--signal-deep);padding:6px 8px;border-radius:6px;letter-spacing:.05em}
+  h2.wk .num{background:var(--violet)}
+  .lead{color:var(--muted);font-size:14.5px;margin:2px 0 18px}
+  p{margin:0 0 12px}
+  a.link{color:var(--signal-deep);text-decoration:none;border-bottom:1px solid rgba(0,143,131,.3)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:16px}
+  code.i{background:#eef2f5;color:#0b3d3a;padding:1.5px 6px;border-radius:5px;font-size:13px}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:15px 17px;border-radius:10px;overflow-x:auto;font-size:13px;line-height:1.55;margin:12px 0;border:1px solid #12314a}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:6px 0 4px}
+  th{text-align:left;background:var(--ink);color:#dbe8ee;padding:10px 12px;font-weight:600;font-size:12.5px}
+  th:first-child{border-top-left-radius:9px}th:last-child{border-top-right-radius:9px}
+  td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:nth-child(even) td{background:#fafbfc}
+  td:first-child{font-weight:600;color:var(--ink)}
+  .schema{background:var(--code-bg);color:var(--code-fg);border-radius:12px;padding:20px 22px;font-size:13px;line-height:1.9}
+  .schema .t{color:var(--signal);font-weight:700}.schema .pk{color:var(--amber)}.schema .fk{color:var(--violet)}.schema .cnt{color:#7fd4ca;float:right}
+  .war{border-left:4px solid var(--amber);background:#fffaf1;border-radius:0 10px 10px 0;padding:13px 18px;margin-bottom:11px}
+  .war b{color:#a86a12}.war .lesson{display:block;margin-top:5px;font-size:13px;color:#7a5a2a}.war .n{font:700 12px/1 "SF Mono",monospace;color:#c68a2a;margin-right:6px}
+  .war.hot{border-left-color:var(--rose);background:#fff5f7}.war.hot b{color:#b23a52}.war.hot .n{color:#c0415a}.war.hot .lesson{color:#8a3a4a}
+  details.qa{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--violet);border-radius:0 10px 10px 0;margin-bottom:9px;overflow:hidden}
+  details.qa summary{cursor:pointer;padding:13px 18px;font-weight:600;font-size:14.5px;color:var(--ink);list-style:none;display:flex;align-items:center;gap:10px}
+  details.qa summary::-webkit-details-marker{display:none}
+  details.qa summary .q{color:var(--violet);font:700 12px/1 "SF Mono",monospace;border:1px solid var(--violet);border-radius:5px;padding:4px 6px;white-space:nowrap}
+  details.qa summary .chev{margin-left:auto;transition:transform .2s;color:var(--muted)}
+  details.qa[open] summary .chev{transform:rotate(90deg)}
+  details.qa .a{padding:2px 18px 16px 52px;font-size:14px;color:var(--ink-2)}
+  .qa-sess{font:700 11px/1 "SF Mono",monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:20px 0 8px;padding-left:4px}
+  .gap{border-left:4px solid var(--rose);background:#fff5f7;border-radius:0 10px 10px 0;padding:11px 16px;margin-bottom:9px;font-size:14px}
+  .gap b{color:#b23a52}
+  ol.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+  ol.steps li{position:relative;padding:12px 16px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:9px;font-size:14px}
+  ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;background:var(--signal-deep);color:#fff;border-radius:7px;display:grid;place-items:center;font:700 13px/1 "SF Mono",monospace}
+  ul.clean{margin:0;padding-left:20px}ul.clean li{margin-bottom:6px;font-size:14px}
+  .note{background:#eef6f5;border:1px solid #cdeae6;border-radius:10px;padding:13px 17px;font-size:13.5px;color:#0b3d3a;margin:14px 0}
+  .note b{color:var(--signal-deep)}
+  .wkbanner{background:linear-gradient(135deg,#2a2350,#1b2a3a);color:#e9e4ff;border-radius:12px;padding:16px 22px;margin:0 0 22px;border:1px solid #3a3470}
+  .wkbanner h3{margin:0 0 3px;font-size:17px;color:#fff}.wkbanner p{margin:0;font-size:13.5px;color:#c3bce8}
+  .cmd-group{margin-bottom:22px}
+  .cmd-group h3{font:700 13px/1 "SF Mono",monospace;letter-spacing:.04em;color:var(--ink);text-transform:uppercase;margin:0 0 10px;padding-bottom:7px;border-bottom:2px solid var(--signal);display:inline-block}
+  .cmd{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden}
+  .cmd .desc{font-size:13px;color:var(--muted);padding:9px 14px 0}.cmd .desc b{color:var(--ink-2)}
+  .cmd pre{margin:8px 12px 12px;font-size:12.5px;padding:11px 13px}
+  .cmd .tok{color:#7fd4ca}.cmd .flag{color:#e0a95c}.cmd .arg{color:#9db4c4}
+  footer{border-top:1px solid var(--line);padding:26px 40px;color:var(--muted);font-size:13px;max-width:1180px;margin:0 auto}
+  @media(max-width:860px){.wrap{grid-template-columns:1fr}nav.toc{position:static;height:auto;border-right:none;border-bottom:1px solid var(--line)}main{padding:24px 20px 60px}}
+  @media print{nav.toc{display:none}.wrap{display:block}details.qa .a{display:block!important}header.hero{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="flow">
+    <span class="node live">Scheduler</span><span class="arr">→</span>
+    <span class="node live">extract</span><span class="arr">→</span>
+    <span class="node live">GCS raw</span><span class="arr">→</span>
+    <span class="node live">transform</span><span class="arr">→</span>
+    <span class="node live">GCS csv</span><span class="arr">→</span>
+    <span class="node live">stage</span><span class="arr">→</span>
+    <span class="node live">TASK: stage+MERGE</span><span class="arr">→</span>
+    <span class="node live">Snowflake</span>
+  </div>
+  <h1>Spotify → GCP → Snowflake Pipeline</h1>
+  <p class="sub">Technical Design Document &amp; Engineering Logbook · Preetham Samatham</p>
+  <div class="meta-row">
+    <div class="m">Last updated<b>Aug 20, 2026 — Session 8</b></div>
+    <div class="m">Phase<b>Week 4 complete · pipeline end-to-end</b></div>
+    <div class="m">Repo<b>preethamsamatham/spotify-gcp-snowflake-pipeline</b></div>
+  </div>
+  <div class="status-pill"><span class="dot"></span> Full pipeline running: Spotify → GCP → Snowflake, clean deduped tables ✓</div>
+</header>
+
+<div class="wrap">
+<nav class="toc">
+  <div class="lbl">Overview</div>
+  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#goal">1 · Project goal</a>
+  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#arch">2 · Architecture</a>
+  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#model">3 · Data model</a>
+  <div class="lbl">Week 4 — Snowflake</div>
+  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#w4">★ Load stage summary</a>
+  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#w4objects">Snowflake objects</a>
+  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#w4merge">Staging + MERGE</a>
+  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#w4task">The recurring task</a>
+  <div class="lbl">Reference</div>
+  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#commands">Command cheat-sheet</a>
+  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#concepts">Doubts &amp; answers</a>
+  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#war">Debugging war stories</a>
+  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#next">Next steps</a>
+  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#constraints">Constraints</a>
+</nav>
+
+<main>
+
+<section id="goal">
+  <h2><span class="num">01</span> Project goal</h2>
+  <div class="card">An end-to-end, fully automated data pipeline: extract Spotify playlist data daily, store raw in GCS, transform into normalized tables, and auto-load into Snowflake — zero manual steps after deployment. Portfolio project for data engineer / data scientist interviews. <b>As of Session 8 the pipeline is complete end to end.</b></div>
+</section>
+
+<section id="arch">
+  <h2><span class="num">02</span> Architecture</h2>
+  <p class="lead">Three trigger styles across the pipeline: clock (extract), event (transform), and interval-poll (Snowflake load task).</p>
+  <div class="card">
+    <p style="margin-bottom:0"><b>Full flow (all live):</b> Cloud Scheduler (2 AM) → <code class="i">extract-spotify</code> → GCS <code class="i">raw_data/to_process/</code> → <code class="i">transform-spotify</code> (event/Eventarc) → GCS <code class="i">transformed_data/</code> → Snowflake external stage → <code class="i">load_spotify_task</code> (every 5 min: COPY into staging → MERGE into final) → clean deduped warehouse tables. Extract→transform verified running autonomously 10 straight days (Aug 10–19).</p>
+  </div>
+</section>
+
+<section id="model">
+  <h2><span class="num">03</span> Data model — final verified state</h2>
+  <p class="lead"><span style="color:var(--signal-deep);font-weight:600">table</span> · <span style="color:#b8860b;font-weight:600">primary key</span> · <span style="color:var(--violet);font-weight:600">foreign key</span> · one row per key after MERGE.</p>
+  <div class="schema mono">
+    <span class="t">SONGS</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="pk">song_id (PK)</span>, name, duration_ms, explicit, track_number, <span class="fk">album_id (FK)</span>, added_at<span class="cnt">180 / 180 uniq</span><br>
+    <span class="t">ARTISTS</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="pk">artist_id (PK)</span>, name<span class="cnt">193 / 193 uniq</span><br>
+    <span class="t">ALBUMS</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="pk">album_id (PK)</span>, name, release_date, total_tracks<span class="cnt">131 / 131 uniq</span><br>
+    <span class="t">SONG_ARTISTS</span>&nbsp;<span class="pk">song_id + artist_id (composite PK)</span> — bridge<span class="cnt">445 / 445 uniq</span>
+  </div>
+  <div class="note"><b>Counts grew vs Week 3</b> (was 128 albums / 188 artists) because the playlist genuinely gained songs over the 10 autonomous days — real change captured. <code class="i">release_date</code> stays STRING (Spotify returns partial/year-only dates). Snowflake accepts PK constraints but does <b>not</b> enforce them — dedup is handled by MERGE.</div>
+</section>
+
+<section id="w4">
+  <h2 class="wk"><span class="num">★</span> Week 4 — Snowflake load stage</h2>
+  <div class="wkbanner"><h3>What this week accomplished</h3><p>Transformed CSVs now auto-load into Snowflake, deduplicated to one current row per key, via a scheduled task using a staging + MERGE pattern. This closes the pipeline end to end.</p></div>
+  <p class="lead">The core problem and its solution, in one picture:</p>
+  <div class="card">
+    <p><b>Problem:</b> extract pulls the full playlist daily → each CSV is a near-duplicate snapshot. Loading directly stacked ~20× duplicates (measured: <b>3,672 rows for 180 unique songs</b>).</p>
+    <pre>GCS CSVs → COPY into <span style="color:#e0a95c">STAGING</span> (raw, all snapshots)
+         → <span style="color:#e0a95c">MERGE</span> into <span style="color:#7fd4ca">FINAL</span> (dedup to newest-per-key, upsert)
+         → staging truncated next run</pre>
+    <p style="margin-bottom:0"><b>Result:</b> MERGE collapsed 1,836 staging rows → 180 clean song rows. Re-running the task on a clean target leaves counts unchanged = <b>idempotent</b> (safe to run forever).</p>
+  </div>
+</section>
+
+<section id="w4objects">
+  <h2 class="wk"><span class="num">3.1</span> Snowflake objects created</h2>
+  <div class="card"><ul class="clean">
+    <li><b>Warehouse</b> <code class="i">spotify_wh</code> — XSMALL, AUTO_SUSPEND=60, AUTO_RESUME=TRUE (compute separate from storage; auto-suspend = cost control).</li>
+    <li><b>Database/schema</b> <code class="i">spotify_db.raw</code>.</li>
+    <li><b>4 final tables</b> — typed columns; composite PK on song_artists; <code class="i">release_date</code> STRING for partial dates.</li>
+    <li><b>4 staging tables</b> <code class="i">*_staging</code> — <code class="i">CREATE TRANSIENT TABLE … LIKE</code> (transient = no fail-safe/time-travel → cheaper; correct for throwaway data).</li>
+    <li><b>Storage integration</b> <code class="i">spotify_gcs_int</code> — scoped to the <code class="i">transformed_data/</code> prefix; SA <code class="i">k16l50000@…</code> granted <code class="i">storage.objectViewer</code>.</li>
+    <li><b>File format</b> <code class="i">spotify_csv_format</code> — SKIP_HEADER=1, quote-enclosed (handles commas in song names).</li>
+    <li><b>External stage</b> <code class="i">spotify_stage</code> — <code class="i">LIST @spotify_stage</code> proved Snowflake reads the bucket.</li>
+    <li><b>Notification integration</b> <code class="i">spotify_pubsub_int</code> — QUEUE/GCP_PUBSUB (built for the abandoned Snowpipe path).</li>
+    <li><b>Task</b> <code class="i">load_spotify_task</code> — 5-minute schedule, runs the staging+MERGE block.</li>
+  </ul></div>
+</section>
+
+<section id="w4merge">
+  <h2 class="wk"><span class="num">3.2</span> The MERGE</h2>
+  <p class="lead">The heart of the load — insert-or-update keyed on PK, with window-function dedup.</p>
+  <pre>MERGE INTO songs t
+USING (SELECT * FROM songs_staging
+       <span style="color:#e0a95c">QUALIFY ROW_NUMBER() OVER (PARTITION BY song_id ORDER BY added_at DESC)=1</span>) s
+ON t.song_id = s.song_id
+WHEN MATCHED THEN UPDATE SET t.name=s.name, t.duration_ms=s.duration_ms, …
+WHEN NOT MATCHED THEN INSERT (…) VALUES (…);</pre>
+  <div class="card" style="margin-top:14px">
+    <ul class="clean">
+      <li><b>The QUALIFY subquery</b> keeps only the newest row per key: partition by key, order newest-first, number the rows, keep #1. This dedups the source before merging.</li>
+      <li><b>ON</b> = the match key ("is this song already in the final table?").</li>
+      <li><b>WHEN MATCHED → UPDATE</b> (key exists, refresh to latest) · <b>WHEN NOT MATCHED → INSERT</b> (new key, add).</li>
+      <li><b>Bridge (song_artists) differs:</b> composite match on both columns, <code class="i">SELECT DISTINCT</code> (no "latest" concept), only <code class="i">WHEN NOT MATCHED</code> (the two columns are the whole row).</li>
+    </ul>
+  </div>
+</section>
+
+<section id="w4task">
+  <h2 class="wk"><span class="num">3.3</span> The recurring task</h2>
+  <div class="card">
+    <p><code class="i">load_spotify_task</code> (5-min schedule) runs, in a <code class="i">BEGIN…END</code> block: truncate staging → COPY new files into staging → four MERGEs into finals. Created suspended; activated with <code class="i">ALTER TASK … RESUME</code>.</p>
+    <p style="margin-bottom:0"><b>Critical: the task has NO <code class="i">FORCE=TRUE</code>.</b> It relies on COPY's load-history to skip already-loaded files, so each run ingests only new daily CSVs. <code class="i">FORCE=TRUE</code> was a one-time backfill tool only — in the recurring task it would reload everything every 5 minutes and duplicate endlessly.</p>
+  </div>
+  <div class="note"><b>The idempotency proof:</b> run the task, counts don't change — COPY finds no new files (load history), and MERGE upserts without duplicating. A pipeline you can run every 5 minutes forever without corrupting data.</div>
+</section>
+
+<section id="commands">
+  <h2><span class="num">⌘</span> Command cheat-sheet (Week 4)</h2>
+  <p class="lead">Grouped by tool. Full Week 1–3 commands are in the repo's earlier TDD.</p>
+
+  <div class="cmd-group"><h3>Pub/Sub (Snowpipe attempt)</h3>
+    <div class="cmd"><div class="desc"><b>Topic → bucket notification → subscription</b> — the event bridge GCS→Snowflake.</div>
+      <pre><span class="tok">gcloud</span> pubsub topics create spotify-snowpipe-topic
+<span class="tok">gcloud</span> storage buckets notifications create gs://<span class="arg">bucket</span> <span class="flag">--topic</span>=spotify-snowpipe-topic <span class="flag">--event-types</span>=OBJECT_FINALIZE
+<span class="tok">gcloud</span> pubsub subscriptions create spotify-snowpipe-sub <span class="flag">--topic</span>=spotify-snowpipe-topic <span class="flag">--ack-deadline</span>=600</pre></div>
+  </div>
+
+  <div class="cmd-group"><h3>Snowflake — setup</h3>
+    <div class="cmd"><div class="desc"><b>Verify cloud/region right after signup</b> (must match the bucket).</div>
+      <pre>SELECT CURRENT_REGION();  <span class="tok">-- want GCP_US_CENTRAL1</span></pre></div>
+    <div class="cmd"><div class="desc"><b>Warehouse, db, schema, tables, integration, file format, stage.</b></div>
+      <pre>CREATE WAREHOUSE spotify_wh WAREHOUSE_SIZE='XSMALL' AUTO_SUSPEND=60 AUTO_RESUME=TRUE;
+CREATE DATABASE spotify_db;  CREATE SCHEMA spotify_db.raw;
+CREATE STORAGE INTEGRATION spotify_gcs_int TYPE=EXTERNAL_STAGE STORAGE_PROVIDER='GCS'
+  ENABLED=TRUE STORAGE_ALLOWED_LOCATIONS=('gcs://<span class="arg">bucket</span>/transformed_data/');
+DESC STORAGE INTEGRATION spotify_gcs_int;   <span class="tok">-- get service account to grant</span>
+CREATE FILE FORMAT spotify_csv_format TYPE=CSV SKIP_HEADER=1 FIELD_OPTIONALLY_ENCLOSED_BY='"';
+CREATE STAGE spotify_stage URL='gcs://<span class="arg">bucket</span>/transformed_data/'
+  STORAGE_INTEGRATION=spotify_gcs_int FILE_FORMAT=spotify_csv_format;
+LIST @spotify_stage;   <span class="tok">-- proves Snowflake can read the bucket</span></pre></div>
+    <div class="cmd"><div class="desc"><b>Grant Snowflake's SA read on the bucket</b> (GCP side).</div>
+      <pre><span class="tok">gcloud</span> storage buckets add-iam-policy-binding gs://<span class="arg">bucket</span> \
+  <span class="flag">--member</span>=<span class="arg">"serviceAccount:k16l50000@…"</span> <span class="flag">--role</span>=<span class="arg">"roles/storage.objectViewer"</span></pre></div>
+  </div>
+
+  <div class="cmd-group"><h3>Snowflake — staging + MERGE + task</h3>
+    <div class="cmd"><div class="desc"><b>Transient staging + one-time backfill</b> (FORCE only here).</div>
+      <pre>CREATE TRANSIENT TABLE songs_staging LIKE songs;
+COPY INTO songs_staging FROM @spotify_stage PATTERN='.*/songs_.*\.csv' FILE_FORMAT=spotify_csv_format FORCE=TRUE;</pre></div>
+    <div class="cmd"><div class="desc"><b>Recurring task</b> — no FORCE; staging→MERGE every 5 min.</div>
+      <pre>CREATE OR REPLACE TASK load_spotify_task WAREHOUSE=spotify_wh SCHEDULE='5 MINUTE' AS
+BEGIN
+  TRUNCATE TABLE songs_staging; …
+  COPY INTO songs_staging FROM @spotify_stage PATTERN='.*/songs_.*\.csv' FILE_FORMAT=spotify_csv_format;
+  MERGE INTO songs t USING (…QUALIFY ROW_NUMBER()…=1) s ON t.song_id=s.song_id
+    WHEN MATCHED THEN UPDATE SET … WHEN NOT MATCHED THEN INSERT …;
+  …
+END;
+ALTER TASK load_spotify_task RESUME;
+EXECUTE TASK load_spotify_task;   <span class="tok">-- run once on demand</span></pre></div>
+    <div class="cmd"><div class="desc"><b>Verify clean + task success.</b></div>
+      <pre>SELECT name,state,error_message FROM TABLE(information_schema.task_history())
+  WHERE name='LOAD_SPOTIFY_TASK' ORDER BY scheduled_time DESC LIMIT 3;
+SELECT COUNT(*) total, COUNT(DISTINCT song_id) uniq FROM songs;   <span class="tok">-- 180 / 180</span></pre></div>
+  </div>
+</section>
+
+<section id="concepts">
+  <h2><span class="num">Q</span> Doubts asked &amp; answered</h2>
+  <p class="lead">Interview revision deck. Week 4 first (newest), earlier weeks below.</p>
+
+  <div class="qa-sess">Session 8 — deep-dive doubts</div>
+  <details class="qa"><summary><span class="q">D1</span> Other GCS event types besides OBJECT_FINALIZE?<span class="chev">›</span></summary>
+    <div class="a"><code class="i">OBJECT_FINALIZE</code> (file created/finished — "arrived"), <code class="i">OBJECT_DELETE</code> (deleted), <code class="i">OBJECT_METADATA_UPDATE</code> (metadata changed, not content), <code class="i">OBJECT_ARCHIVE</code> (archived / version superseded). Filtered to FINALIZE only so deletes/metadata don't wake the loader for nothing.</div></details>
+  <details class="qa"><summary><span class="q">D2</span> Other event providers/types Snowflake listens to?<span class="chev">›</span></summary>
+    <div class="a">Providers (cloud-agnostic): <code class="i">GCP_PUBSUB</code>, <code class="i">AWS_SQS</code>/<code class="i">AWS_SNS</code>, <code class="i">AZURE_STORAGE_QUEUE</code>/Event Grid. Flavors: inbound auto-ingest (<code class="i">QUEUE</code>, <code class="i">INBOUND</code> — listen for file events), outbound error notifications (push Snowpipe errors to a queue), and email notifications (task-failure alerts).</div></details>
+  <details class="qa"><summary><span class="q">D3</span> What happens when AUTO_INGEST = FALSE?<span class="chev">›</span></summary>
+    <div class="a">The pipe does NOT listen for events; it loads only when triggered manually via Snowflake's REST API (<code class="i">insertFiles</code>). Used when your own application controls loading (upload a file, then tell Snowflake to load those specific files) rather than reacting to cloud events.</div></details>
+  <details class="qa"><summary><span class="q">D4</span> What does FORCE do? (FALSE is default)<span class="chev">›</span></summary>
+    <div class="a">COPY remembers every file it has loaded (load history, kept 64 days). <b>FORCE=FALSE</b> (default) = skip already-loaded files → re-running loads nothing (0 rows) — correct for a recurring job (only new files get in). <b>FORCE=TRUE</b> = ignore history, reload regardless — a one-time backfill tool. The MERGE design is immune to reloads anyway (upsert → no new duplicate row).</div></details>
+  <details class="qa"><summary><span class="q">D5</span> What is a "one-time backfill"?<span class="chev">›</span></summary>
+    <div class="a">Loading pre-existing <i>historical</i> data once to catch a table up to the present, vs ongoing loading of new data. Here: 10 days of CSVs already sat in the bucket → seed the tables once (with FORCE), then the task handles only new daily files (no FORCE). Analogy: copying a month of old letters into a new journal (backfill) vs writing tomorrow's entry (ongoing).</div></details>
+  <details class="qa"><summary><span class="q">D6</span> Why QUALIFY ROW_NUMBER()…? Any other way?<span class="chev">›</span></summary>
+    <div class="a">Keeps one row per key (the newest): partition by key, order newest-first, number rows, keep #1. <code class="i">QUALIFY</code> filters on a window function (<code class="i">WHERE</code> can't — it runs before the window computes). Alternatives: (1) subquery wrapping ROW_NUMBER + outer <code class="i">WHERE rn=1</code> (portable, no QUALIFY); (2) <code class="i">GROUP BY</code>+aggregate — only for per-column maxes, not the whole newest row; (3) <code class="i">RANK()</code>/<code class="i">DENSE_RANK()</code> — risky: ties share a rank → duplicates; ROW_NUMBER guarantees exactly one; (4) <code class="i">DISTINCT</code> — only collapses fully-identical rows (works for the bridge, not songs). Chose ROW_NUMBER for the on-ties guarantee, QUALIFY for readability.</div></details>
+
+  <div class="qa-sess">Session 7 — Snowflake basics</div>
+  <details class="qa"><summary><span class="q">Q</span> Why a warehouse (Snowflake) vs object storage (GCS)?<span class="chev">›</span></summary>
+    <div class="a">GCS stores files cheaply but has no query engine — no joins, aggregations, or types. A warehouse loads data into a columnar, typed, indexed format for fast SQL and BI-tool access. Pattern: GCS = data lake (cheap storage), Snowflake = warehouse (fast analysis), the load task = the bridge.</div></details>
+  <details class="qa"><summary><span class="q">Q</span> Warehouse vs transactional database?<span class="chev">›</span></summary>
+    <div class="a">OLAP (analytics — big scans/joins; Snowflake/BigQuery/Redshift/Synapse) vs OLTP (app reads/writes one row at a time; Postgres/Cloud SQL/RDS/Azure SQL). This project is analytics → warehouse. Native warehouse per cloud: GCP→BigQuery, AWS→Redshift, Azure→Synapse. Snowflake is cloud-agnostic → portable.</div></details>
+  <details class="qa"><summary><span class="q">Q</span> Snowflake's headline architecture?<span class="chev">›</span></summary>
+    <div class="a">Separation of storage and compute — data in one layer; virtual warehouses provide independent, elastic compute against it; pay for each separately; multiple workloads hit the same data without contention. Three layers: storage, compute (warehouses), cloud services.</div></details>
+  <details class="qa"><summary><span class="q">Q</span> Does Snowflake enforce PRIMARY KEY?<span class="chev">›</span></summary>
+    <div class="a">No — PK/FK are optimizer/documentation metadata, NOT enforced (only NOT NULL is enforced). Dedup must be handled in the load — which is exactly what the MERGE does.</div></details>
+  <details class="qa"><summary><span class="q">Q</span> Storage integration vs notification integration?<span class="chev">›</span></summary>
+    <div class="a">Both are credential-less (Snowflake issues an SA identity you grant least-privilege; no keys exchanged). Storage integration = access to the bucket's <b>files</b>. Notification integration = connection to the bucket's <b>events</b> (a cloud queue, e.g. Pub/Sub).</div></details>
+  <details class="qa"><summary><span class="q">Q</span> Snowpipe vs scheduled COPY task?<span class="chev">›</span></summary>
+    <div class="a">Snowpipe = continuous, event-driven (a cloud notification triggers the load). Scheduled task = polling/batch (runs COPY on a timer). This project uses the task after the Snowpipe bind failed. Same outcome (auto-load); different trigger model.</div></details>
+  <details class="qa"><summary><span class="q">Q</span> Internal vs external stage? TRANSIENT tables? Topic vs subscription?<span class="chev">›</span></summary>
+    <div class="a"><b>Stage:</b> external → cloud storage you own (this project); internal → Snowflake-managed. <b>TRANSIENT:</b> no fail-safe/limited time-travel → cheaper; correct for throwaway staging. <b>Pub/Sub:</b> topic = broadcast channel (publishers send); subscription = listener (consumers read) — decouples producer (GCS) from consumer (Snowflake), which is why event systems scale.</div></details>
+</section>
+
+<section id="war">
+  <h2><span class="num">✕</span> Debugging war stories</h2>
+  <p class="lead">Week 4 in red are the headliners — the Snowpipe bind saga and the MERGE-on-a-dirty-target trap.</p>
+
+  <div class="war hot"><span class="n">20</span><b>Snowpipe Pub/Sub bind failure — the big one (unresolved → pivoted)</b> — built the full path (topic, bucket notification, subscription, notification integration); <code class="i">CREATE PIPE … AUTO_INGEST=TRUE</code> repeatedly failed with <i>Could not monitor … PERMISSION_DENIED</i>. <span class="lesson">Verified the SA had <code class="i">pubsub.subscriber</code> (subscription + project + topic) AND <code class="i">pubsub.viewer</code> (project), all readable via get-iam-policy; confirmed integration's subscription name + SA matched; confirmed subscription↔topic link; waited out propagation (incl. 10 min); recreated the integration (SA unchanged); confirmed personal Gmail (no org policy). All correct, still failed — root cause never found. Pivoted to a scheduled COPY task. Framing: "built Snowpipe end to end, hit a persistent cross-cloud IAM bind error, pivoted — same outcome; can discuss event-driven vs batch."</span></div>
+  <div class="war hot"><span class="n">21</span><b>Task SUCCEEDED but tables re-duplicated</b> — counts ballooned (songs 2016/180). <span class="lesson">Cause: finals still held dupes from earlier manual FORCE=TRUE loads — MERGE dedups the source but can't dedup rows already in the target. Fix: reset to clean, then MERGE maintains cleanliness. Lesson: MERGE keeps a target clean only if it started clean.</span></div>
+  <div class="war"><span class="n">17</span><b>Wrong cloud at signup</b> — first Snowflake trial defaulted to AWS_US_EAST_2. Caught via <code class="i">CURRENT_REGION()</code> + the integration SA reading <code class="i">awsuseast2</code>. <span class="lesson">Recreated on GCP_US_CENTRAL1 (matching the bucket) via a +alias email. Verify CURRENT_REGION() right after signup.</span></div>
+  <div class="war"><span class="n">18</span><b>Snowsight runs only the statement under the cursor</b> — repeated "object does not exist" errors. <span class="lesson">Ctrl+A before Run to execute the whole worksheet.</span></div>
+  <div class="war"><span class="n">19</span><b>Regex PATTERN substring bug (recurred in SQL)</b> — <code class="i">.*artists_.*\.csv</code> also matched <code class="i">song_artists_…csv</code> → artists loaded 1261 rows. <span class="lesson">Anchor with a path separator: <code class="i">.*/artists_.*\.csv</code>.</span></div>
+  <div class="war"><span class="n">22</span><b>COPY load-history "0 files" confusion</b> — re-running COPY returned 0 rows because COPY skips already-loaded files (idempotency by design). <span class="lesson">Diagnosed with FORCE=TRUE as a one-time tool; also revealed 10 days of autonomous runs.</span></div>
+  <div class="war"><span class="n">23</span><b>BEGIN…END task parse error</b> — <code class="i">unexpected 'END'</code>. <span class="lesson">Run the whole block as one unit; collapse each MERGE to a single line.</span></div>
+  <div class="war"><span class="n">24</span><b>Snowflake reuses the same SA per account</b> — recreating the notification integration did NOT mint a new SA (stayed k26l…), so existing grants remained valid. Ruled out the "wrong SA after recreate" theory.</div>
+  <div class="note" style="margin-top:14px">War stories 1–16 (Weeks 1–3: PowerShell encoding, Spotify API migration, credential rotation, the file-write-in-loop bug, the inverted boolean guard, Eventarc IAM, the prevented infinite loop, etc.) are in the earlier TDD sections.</div>
+</section>
+
+<section id="next">
+  <h2><span class="num">→</span> Open items &amp; next steps</h2>
+  <ol class="steps">
+    <li>Commit <code class="i">snowflake_setup.sql</code> (final state: tables, staging, integration, stage, file format, task, MERGEs) + the gcloud Pub/Sub commands as a note. <code class="i">git status</code> first.</li>
+    <li>Optional: drop the unused notification integration + Pub/Sub topic/subscription, or keep + document as the "Snowpipe attempt" (makes the war story tangible).</li>
+    <li><b>Week 5 — analytics + polish:</b> SQL on the clean tables (top artists via the bridge, duration distribution, release-date eras, added_at timeline); README + architecture diagram; task-failure monitoring/alerting; cost notes; embed screenshots.</li>
+    <li><b>Optional v2:</b> retry Snowpipe (fresh integration or Snowflake support) to convert polling → event-driven — a nice talking point.</li>
+  </ol>
+</section>
+
+<section id="constraints">
+  <h2><span class="num">§</span> Confirmed constraints &amp; final state</h2>
+  <div class="card"><ul class="clean">
+    <li>Spotify Premium dev-mode app (5-user cap, no popularity field).</li>
+    <li>GCP free trial: $300, ~$0 used, expires Oct 22, 2026.</li>
+    <li>Snowflake trial: <b>GCP / us-central1</b> (first attempt was AWS by mistake, recreated), 30 days, $400 ~untouched.</li>
+    <li>Deployed functions: <code class="i">extract-spotify</code> (gen2, HTTP, scheduled 2 AM) · <code class="i">transform-spotify</code> (gen2, Cloud Storage finalize trigger).</li>
+    <li>Snowflake: <code class="i">spotify_wh</code>, <code class="i">spotify_db.raw</code>, 4 final + 4 staging tables, <code class="i">spotify_gcs_int</code>, <code class="i">spotify_stage</code>, <code class="i">spotify_csv_format</code>, <code class="i">load_spotify_task</code> (5-min). <code class="i">spotify_pubsub_int</code> unused after Snowpipe pivot.</li>
+    <li><b>Pipeline status: COMPLETE end to end</b> — Spotify → extract → GCS → transform → GCS → Snowflake (task, staging + MERGE) → clean deduped tables. Week 5 polish remaining.</li>
+  </ul></div>
+</section>
+
+</main>
+</div>
+
+<footer>Living document — regenerated each session. Markdown (<code class="i">TDD-spotify-pipeline.md</code>) is the git source of truth; this HTML is the readable reference. · Spotify → GCP → Snowflake · Preetham Samatham · Session 8, Aug 20 2026</footer>
+
+
+
+</body></html>

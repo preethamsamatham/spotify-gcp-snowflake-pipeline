@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 
 
-playlist_id = "1y4gcj5nrSvezfKmuOpExp" 
+PLAYLIST_ID = "1y4gcj5nrSvezfKmuOpExp" 
 def get_secret(secret_name):
     project_id = "python-gcp-snowflake"  # Replace with your GCP project ID
     client = secretmanager.SecretManagerServiceClient()
@@ -47,7 +47,7 @@ def get_all_tracks(sp, playlist_id):
 @functions_framework.http
 def extract_spotify(request):   
     sp = get_spotify_client()
-    tracks = get_all_tracks(sp, playlist_id)
+    tracks = get_all_tracks(sp, PLAYLIST_ID)
     ndjson = "\n".join(json.dumps(track, ensure_ascii=False) for track in tracks)
     filename = f"raw_data/to_process/spotify_raw_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     storage_client = storage.Client()
@@ -58,5 +58,5 @@ def extract_spotify(request):
 
 if __name__ == "__main__":
     sp = get_spotify_client()
-    results = sp.playlist_items(playlist_id, limit=1)
+    results = sp.playlist_items(PLAYLIST_ID, limit=1)
     print(results["items"][0]["item"]["name"])
