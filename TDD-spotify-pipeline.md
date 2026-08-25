@@ -414,6 +414,77 @@ The Snowflake account has three identifiers for one account: `GIHJUIA-ZR03463` (
 
 ---
 
+# WEEK 6 — BI Serving Layer (Design in Progress, Aug 25, 2026)
+
+## W6.1 Goal
+
+Add a portfolio-ready BI serving layer without changing the authoritative Spotify ingestion path. The planned extension is:
+
+```text
+Spotify → GCP → GCS → Snowflake (source of truth)
+                              → curated BI export → BigQuery (serving layer)
+                                                  → Looker Studio dashboard
+```
+
+The purpose is to demonstrate governed cross-warehouse publishing, BigQuery, and a live dashboard. BigQuery is not a second source of truth.
+
+## W6.2 Decisions made
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Dashboard product | Looker Studio | Provides a practical, shareable dashboard and native BigQuery connectivity |
+| Authoritative warehouse | Snowflake | The existing load, deduplication, monitoring, and recovery path already terminates here |
+| BigQuery responsibility | Read-only BI serving layer | Keeps business truth in one place and limits duplicated data to curated dashboard outputs |
+| Dashboard meaning | Current playlist state | Removed songs and relationships must disappear from the published current-state dataset |
+| Failure experience | Continue serving the last successful dataset | A stale but clearly labeled dashboard is preferable to an unavailable dashboard for this non-critical portfolio workload |
+| Freshness disclosure | Last-successful-refresh timestamp plus stale warning | A timestamp provides evidence; the warning makes missed freshness visible without requiring users to interpret the timestamp |
+
+## W6.3 Loading strategy under evaluation
+
+The recommended Version 1 design is a full refresh because the current source contains roughly 180 songs. Each run should load curated data into temporary or staging tables, validate it, and replace the published tables only after the complete batch succeeds. This naturally removes records that no longer belong to the playlist and prevents partial dashboard updates.
+
+Incremental `MERGE` loading is a planned scaling exercise, not a current volume requirement. Stable keys are already defined:
+
+```text
+SONGS        → SONG_ID
+ALBUMS       → ALBUM_ID
+ARTISTS      → ARTIST_ID
+SONG_ARTISTS → SONG_ID + ARTIST_ID
+```
+
+A batch ID is useful for lineage and replay auditing, but does not prevent duplicates by itself. Idempotency must come from atomic replacement for full refreshes or key-based `MERGE` behavior for incremental loads.
+
+## W6.4 Scaling triggers
+
+Reconsider incremental loading when measured behavior—not row count alone—shows that full refresh is no longer appropriate:
+
+- The refresh repeatedly misses its agreed dashboard freshness SLA.
+- A small change ratio (for example, about 5% or less) causes most transferred and processed rows to be unchanged.
+- Snowflake compute, cross-cloud transfer, or BigQuery processing exceeds the agreed BI pipeline budget.
+
+Metrics to capture from the first implementation: batch ID, source row counts, published row counts, refresh duration, bytes transferred, last successful refresh time, failure status, and estimated cost.
+
+## W6.5 Failure and recovery design
+
+- Snowflake remains authoritative if Snowflake and BigQuery disagree.
+- A failed publish must leave the previous successful BigQuery tables available.
+- Recovery must replay from Snowflake into BigQuery; BigQuery must never be used to repair Snowflake.
+- Automatic retry policy is still an open decision. The current recommendation is a small number of retries with increasing delays, followed by an alert and a manual replay option.
+- The Looker Studio dashboard must expose the last successful refresh timestamp and show a stale-data warning after the freshness SLA is exceeded.
+
+## W6.6 Implementation items
+
+1. Define the curated Snowflake views or queries that form the BI contract.
+2. Choose the BigQuery project, dataset, table names, region, and service identity.
+3. Implement staging, validation, and atomic publication.
+4. Add freshness and batch metadata.
+5. Add bounded retries, alerting, and manual replay after the retry decision is finalized.
+6. Connect Looker Studio and build the first current-playlist dashboard.
+7. Validate row counts and relationship integrity across Snowflake and BigQuery.
+
+**Status:** architecture documented; no BigQuery resources or synchronization code have been created yet.
+
+---
 ## 12. Confirmed Constraints
 
 - Spotify Premium required for dev-mode app (owner has ✓). Dev-mode: 5-user cap, reduced endpoints, no popularity field.
