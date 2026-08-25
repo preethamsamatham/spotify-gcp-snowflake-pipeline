@@ -1,0 +1,5 @@
+snowflake-connector-python
+cryptography
+google-cloud-storage
+google-cloud-secret-manager
+sendgrid

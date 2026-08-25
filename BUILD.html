@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Log — Spotify Pipeline Digest</title>
+<style>
+:root{--jasmine:#FFD581;--cotton:#FF99A4;--coral:#FE6F61;--ink:#2b1d1a;--paper:#FFF8F0;--mute:#9a7d72;}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--paper);color:var(--ink);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+code{font-family:'SF Mono',ui-monospace,'Cascadia Code',Consolas,monospace;font-size:.86em;background:rgba(254,111,97,.12);color:#c8493c;padding:1px 5px;border-radius:5px}
+.prose code{white-space:nowrap}
+a{color:inherit}
+
+/* hero */
+.hero{padding:64px 24px 40px;max-width:920px;margin:0 auto;text-align:center}
+.eyebrow{font-size:.72rem;letter-spacing:.28em;text-transform:uppercase;color:var(--coral);font-weight:700}
+.hero h1{font-size:clamp(2.4rem,6vw,4rem);font-weight:800;letter-spacing:-.02em;line-height:1.02;margin:14px 0 8px}
+.hero h1 em{font-style:normal;background:linear-gradient(120deg,var(--coral),var(--cotton));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{color:var(--mute);font-size:1.05rem;max-width:600px;margin:0 auto}
+.flow{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:28px auto 0;max-width:760px}
+.flow span{font-size:.72rem;font-weight:600;padding:5px 11px;border-radius:999px;background:#fff;border:1.5px solid rgba(254,111,97,.25);color:#8a5a52}
+.flow .arw{border:none;background:none;color:var(--cotton);padding:5px 0;font-weight:800}
+
+/* layout */
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px 80px;display:grid;grid-template-columns:220px 1fr;gap:44px;align-items:start}
+nav.toc{position:sticky;top:24px;font-size:.9rem}
+nav.toc .lbl{font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--mute);margin:0 0 10px;font-weight:700}
+nav.toc a{display:flex;align-items:center;gap:9px;padding:7px 0;color:#7a5f57;text-decoration:none;font-weight:600;border-bottom:1px solid rgba(254,111,97,.08)}
+nav.toc a:hover{color:var(--coral)}
+nav.toc .dot{width:9px;height:9px;border-radius:50%;flex:none}
+
+/* phase */
+.phase{margin-bottom:56px;scroll-margin-top:20px}
+.phase-head{border-left:5px solid var(--pc);padding:2px 0 2px 18px;margin-bottom:26px}
+.phase-num{font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;font-weight:800;color:var(--pc)}
+.phase-head h2{font-size:1.9rem;font-weight:800;letter-spacing:-.02em;margin:2px 0 6px}
+.phase-sub{color:var(--mute);font-size:1rem;max-width:560px}
+
+/* step */
+.step{margin-bottom:24px;scroll-margin-top:20px}
+.step-head{display:flex;align-items:baseline;gap:12px;margin-bottom:8px}
+.step-id{font-family:'SF Mono',monospace;font-size:.8rem;font-weight:700;color:#fff;background:var(--pc);padding:2px 9px;border-radius:6px;flex:none}
+.step-head h3{font-size:1.12rem;font-weight:700}
+.prose{color:#5f4a43;margin-bottom:14px;max-width:640px}
+.prose em{font-style:italic;color:var(--ink)}
+
+/* code */
+.code{position:relative;background:#2b1d1a;border-radius:12px;margin-bottom:14px;overflow:hidden;box-shadow:0 6px 20px -12px rgba(254,111,97,.5)}
+.code pre{margin:0;padding:18px 20px;overflow-x:auto}
+.code code{background:none;color:#ffe8d6;padding:0;font-size:.8rem;line-height:1.65;white-space:pre}
+.code .k{color:var(--jasmine);font-weight:600}
+.code .s{color:#a8e6b0}
+.code .c{color:#c99;font-style:italic}
+.code .fl{color:var(--cotton)}
+.copy{position:absolute;top:10px;right:10px;font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#ffd9cf;background:rgba(254,111,97,.28);border:1px solid rgba(255,153,164,.35);padding:4px 10px;border-radius:6px;cursor:pointer;transition:.15s}
+.copy:hover{background:var(--coral);color:#fff}
+.copy.done{background:#7bc47f;color:#fff;border-color:#7bc47f}
+
+/* gotchas */
+.gotchas{background:linear-gradient(135deg,rgba(255,213,129,.18),rgba(255,153,164,.14));border-radius:20px;padding:34px 30px;margin-top:20px}
+.gotchas > h2{font-size:1.5rem;font-weight:800;margin-bottom:4px}
+.gotchas > p.sub{color:var(--mute);margin-bottom:22px}
+.glist{display:grid;gap:14px}
+.g{background:#fff;border-radius:12px;padding:15px 18px;border-left:4px solid var(--coral)}
+.g h4{font-size:.98rem;font-weight:700;margin-bottom:3px}
+.g p{color:#6a534b;font-size:.92rem}
+
+footer{text-align:center;padding:40px 24px;color:var(--mute);font-size:.85rem;border-top:1px solid rgba(254,111,97,.12);max-width:1080px;margin:0 auto}
+footer b{color:var(--coral)}
+
+@media(max-width:820px){
+  .wrap{grid-template-columns:1fr;gap:24px}
+  nav.toc{position:static;display:flex;flex-wrap:wrap;gap:4px 14px;padding-bottom:12px;border-bottom:1px solid rgba(254,111,97,.15)}
+  nav.toc .lbl{width:100%}
+  nav.toc a{border:none;padding:4px 0}
+}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style></head>
+<body>
+
+<header class="hero">
+  <p class="eyebrow">Build Log · Session 9</p>
+  <h1>How the pipeline learned to <em>email itself</em></h1>
+  <p>Every command and snippet that turned a silent Spotify&nbsp;&rarr;&nbsp;GCP&nbsp;&rarr;&nbsp;Snowflake pipeline into one that reports what it did, every morning at 3:20&nbsp;AM.</p>
+  <div class="flow">
+    <span>Spotify</span><span class="arw">&rarr;</span>
+    <span>extract</span><span class="arw">&rarr;</span>
+    <span>GCS</span><span class="arw">&rarr;</span>
+    <span>transform</span><span class="arw">&rarr;</span>
+    <span>Snowflake load + log</span><span class="arw">&rarr;</span>
+    <span>digest fn</span><span class="arw">&rarr;</span>
+    <span>email</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="toc">
+    <p class="lbl">Phases</p>
+    <a href="#p1"><span class="dot" style="background:#FE6F61"></span>Phase 1 · Instrument the load</a><a href="#p2"><span class="dot" style="background:#FF99A4"></span>Phase 2 · Monitor</a><a href="#p3"><span class="dot" style="background:#FFD581"></span>Phase 3 · The email function</a><a href="#p4"><span class="dot" style="background:#FE6F61"></span>Phase 4 · Ship to the cloud</a>
+    <a href="#gotchas"><span class="dot" style="background:var(--ink)"></span>Gotchas &amp; cleanup</a>
+  </nav>
+  <main>
+    <section class="phase" id="p1" style="--pc:#FE6F61">
+  <header class="phase-head">
+    <span class="phase-num">Phase&nbsp;1</span>
+    <h2>Instrument the load</h2>
+    <p class="phase-sub">Capture each MERGE's counts before Snowflake discards them — and cut the credit burn.</p>
+  </header>
+  <article class="step" id="s1a">
+  <div class="step-head"><span class="step-id">1a</span><h3>Create the log table</h3></div>
+  <p class="prose">One row per (table, run). <code>run_id</code> groups a run's four rows; <code>task_run_id</code> links each to <code>query_history</code>.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="sql"><code><span class="k">CREATE</span> <span class="k">OR</span> <span class="k">REPLACE</span> <span class="k">TABLE</span> spotify_db.raw.load_log (
+  log_id        <span class="k">NUMBER</span> <span class="k">AUTOINCREMENT</span>,
+  table_name    <span class="k">STRING</span>,
+  rows_inserted <span class="k">NUMBER</span>,
+  rows_updated  <span class="k">NUMBER</span>,
+  loaded_at     <span class="k">TIMESTAMP_NTZ</span> <span class="k">DEFAULT</span> <span class="k">CURRENT_TIMESTAMP</span>(),
+  run_id        <span class="k">STRING</span>,
+  task_run_id   <span class="k">STRING</span>
+);</code></pre></div>
+</article>
+<article class="step" id="s1b">
+  <div class="step-head"><span class="step-id">1b</span><h3>The capture pattern</h3></div>
+  <p class="prose">The core trick. Run <em>immediately</em> after each MERGE — nothing between, or <code>LAST_QUERY_ID()</code> points at the wrong statement. A NOT-MATCHED-only MERGE (the bridge) has no "rows updated" column, so hardcode <code>0</code> there.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="sql"><code><span class="k">INSERT</span> <span class="k">INTO</span> load_log (table_name,run_id,task_run_id,rows_inserted,rows_updated)
+<span class="k">SELECT</span> <span class="s">&#x27;songs&#x27;</span>, :run_id, <span class="k">LAST_QUERY_ID</span>(),
+       &quot;number of rows inserted&quot;,&quot;number of rows updated&quot;
+<span class="k">FROM</span> <span class="k">TABLE</span>(<span class="k">RESULT_SCAN</span>(<span class="k">LAST_QUERY_ID</span>()));</code></pre></div>
+</article>
+<article class="step" id="s1c">
+  <div class="step-head"><span class="step-id">1c</span><h3>The full rebuilt load task</h3></div>
+  <p class="prose">Daily schedule, all four MERGE+capture pairs, and the <code>pipeline_state</code> handoff as the last statement. Run in its own worksheet.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="sql"><code><span class="k">CREATE</span> <span class="k">OR</span> <span class="k">REPLACE</span> <span class="k">TASK</span> load_spotify_task
+  <span class="k">WAREHOUSE</span> = spotify_wh
+  <span class="k">SCHEDULE</span> = <span class="s">&#x27;<span class="k">USING</span> CRON 0 3 * * * America/Chicago&#x27;</span>
+<span class="k">AS</span>
+<span class="k">BEGIN</span>
+  <span class="k">LET</span> run_id <span class="k">STRING</span> := <span class="k">UUID_STRING</span>();
+  <span class="k">TRUNCATE</span> <span class="k">TABLE</span> songs_staging;
+  <span class="k">TRUNCATE</span> <span class="k">TABLE</span> albums_staging;
+  <span class="k">TRUNCATE</span> <span class="k">TABLE</span> artists_staging;
+  <span class="k">TRUNCATE</span> <span class="k">TABLE</span> song_artists_staging;
+  <span class="k">COPY</span> <span class="k">INTO</span> songs_staging <span class="k">FROM</span> @spotify_stage <span class="k">PATTERN</span>=<span class="s">&#x27;.*/songs_.*\\.csv&#x27;</span> <span class="k">FILE_FORMAT</span>=spotify_csv_format;
+  <span class="k">COPY</span> <span class="k">INTO</span> albums_staging <span class="k">FROM</span> @spotify_stage <span class="k">PATTERN</span>=<span class="s">&#x27;.*/albums_.*\\.csv&#x27;</span> <span class="k">FILE_FORMAT</span>=spotify_csv_format;
+  <span class="k">COPY</span> <span class="k">INTO</span> artists_staging <span class="k">FROM</span> @spotify_stage <span class="k">PATTERN</span>=<span class="s">&#x27;.*/artists_.*\\.csv&#x27;</span> <span class="k">FILE_FORMAT</span>=spotify_csv_format;
+  <span class="k">COPY</span> <span class="k">INTO</span> song_artists_staging <span class="k">FROM</span> @spotify_stage <span class="k">PATTERN</span>=<span class="s">&#x27;.*/song_artists_.*\\.csv&#x27;</span> <span class="k">FILE_FORMAT</span>=spotify_csv_format;
+
+  <span class="k">MERGE</span> <span class="k">INTO</span> songs t <span class="k">USING</span> (<span class="k">SELECT</span> * <span class="k">FROM</span> songs_staging <span class="k">QUALIFY</span> <span class="k">ROW_NUMBER</span>() <span class="k">OVER</span> (<span class="k">PARTITION</span> <span class="k">BY</span> song_id <span class="k">ORDER</span> <span class="k">BY</span> added_at <span class="k">DESC</span>)=1) s <span class="k">ON</span> t.song_id=s.song_id <span class="k">WHEN</span> <span class="k">MATCHED</span> <span class="k">THEN</span> <span class="k">UPDATE</span> <span class="k">SET</span> t.name=s.name,t.duration_ms=s.duration_ms,t.explicit=s.explicit,t.track_number=s.track_number,t.album_id=s.album_id,t.added_at=s.added_at <span class="k">WHEN</span> <span class="k">NOT</span> <span class="k">MATCHED</span> <span class="k">THEN</span> <span class="k">INSERT</span> (song_id,name,duration_ms,explicit,track_number,album_id,added_at) <span class="k">VALUES</span> (s.song_id,s.name,s.duration_ms,s.explicit,s.track_number,s.album_id,s.added_at);
+  <span class="k">INSERT</span> <span class="k">INTO</span> load_log (table_name,run_id,task_run_id,rows_inserted,rows_updated) <span class="k">SELECT</span> <span class="s">&#x27;songs&#x27;</span>,:run_id,<span class="k">LAST_QUERY_ID</span>(),&quot;number of rows inserted&quot;,&quot;number of rows updated&quot; <span class="k">FROM</span> <span class="k">TABLE</span>(<span class="k">RESULT_SCAN</span>(<span class="k">LAST_QUERY_ID</span>()));
+
+  <span class="k">MERGE</span> <span class="k">INTO</span> albums t <span class="k">USING</span> (<span class="k">SELECT</span> * <span class="k">FROM</span> albums_staging <span class="k">QUALIFY</span> <span class="k">ROW_NUMBER</span>() <span class="k">OVER</span> (<span class="k">PARTITION</span> <span class="k">BY</span> album_id <span class="k">ORDER</span> <span class="k">BY</span> album_id)=1) s <span class="k">ON</span> t.album_id=s.album_id <span class="k">WHEN</span> <span class="k">MATCHED</span> <span class="k">THEN</span> <span class="k">UPDATE</span> <span class="k">SET</span> t.name=s.name,t.release_date=s.release_date,t.total_tracks=s.total_tracks <span class="k">WHEN</span> <span class="k">NOT</span> <span class="k">MATCHED</span> <span class="k">THEN</span> <span class="k">INSERT</span> (album_id,name,release_date,total_tracks) <span class="k">VALUES</span> (s.album_id,s.name,s.release_date,s.total_tracks);
+  <span class="k">INSERT</span> <span class="k">INTO</span> load_log (table_name,run_id,task_run_id,rows_inserted,rows_updated) <span class="k">SELECT</span> <span class="s">&#x27;albums&#x27;</span>,:run_id,<span class="k">LAST_QUERY_ID</span>(),&quot;number of rows inserted&quot;,&quot;number of rows updated&quot; <span class="k">FROM</span> <span class="k">TABLE</span>(<span class="k">RESULT_SCAN</span>(<span class="k">LAST_QUERY_ID</span>()));
+
+  <span class="k">MERGE</span> <span class="k">INTO</span> artists t <span class="k">USING</span> (<span class="k">SELECT</span> * <span class="k">FROM</span> artists_staging <span class="k">QUALIFY</span> <span class="k">ROW_NUMBER</span>() <span class="k">OVER</span> (<span class="k">PARTITION</span> <span class="k">BY</span> artist_id <span class="k">ORDER</span> <span class="k">BY</span> artist_id)=1) s <span class="k">ON</span> t.artist_id=s.artist_id <span class="k">WHEN</span> <span class="k">MATCHED</span> <span class="k">THEN</span> <span class="k">UPDATE</span> <span class="k">SET</span> t.name=s.name <span class="k">WHEN</span> <span class="k">NOT</span> <span class="k">MATCHED</span> <span class="k">THEN</span> <span class="k">INSERT</span> (artist_id,name) <span class="k">VALUES</span> (s.artist_id,s.name);
+  <span class="k">INSERT</span> <span class="k">INTO</span> load_log (table_name,run_id,task_run_id,rows_inserted,rows_updated) <span class="k">SELECT</span> <span class="s">&#x27;artists&#x27;</span>,:run_id,<span class="k">LAST_QUERY_ID</span>(),&quot;number of rows inserted&quot;,&quot;number of rows updated&quot; <span class="k">FROM</span> <span class="k">TABLE</span>(<span class="k">RESULT_SCAN</span>(<span class="k">LAST_QUERY_ID</span>()));
+
+  <span class="k">MERGE</span> <span class="k">INTO</span> song_artists t <span class="k">USING</span> (<span class="k">SELECT</span> <span class="k">DISTINCT</span> song_id,artist_id <span class="k">FROM</span> song_artists_staging) s <span class="k">ON</span> t.song_id=s.song_id <span class="k">AND</span> t.artist_id=s.artist_id <span class="k">WHEN</span> <span class="k">NOT</span> <span class="k">MATCHED</span> <span class="k">THEN</span> <span class="k">INSERT</span> (song_id,artist_id) <span class="k">VALUES</span> (s.song_id,s.artist_id);
+  <span class="k">INSERT</span> <span class="k">INTO</span> load_log (table_name,run_id,task_run_id,rows_inserted,rows_updated) <span class="k">SELECT</span> <span class="s">&#x27;song_artists&#x27;</span>,:run_id,<span class="k">LAST_QUERY_ID</span>(),&quot;number of rows inserted&quot;,0 <span class="k">FROM</span> <span class="k">TABLE</span>(<span class="k">RESULT_SCAN</span>(<span class="k">LAST_QUERY_ID</span>()));
+
+  <span class="k">INSERT</span> <span class="k">INTO</span> spotify_db.raw.pipeline_state (run_id,completed_at,tables_loaded)
+    <span class="k">SELECT</span> :run_id, <span class="k">CURRENT_TIMESTAMP</span>(), <span class="k">COUNT</span>(*) <span class="k">FROM</span> spotify_db.raw.load_log <span class="k">WHERE</span> run_id=:run_id;
+<span class="k">END</span>;</code></pre></div>
+</article>
+<article class="step" id="s1d">
+  <div class="step-head"><span class="step-id">1d</span><h3>The credit fix — 280x</h3></div>
+  <p class="prose">Was <code>'5 MINUTE'</code>: 288 runs/day, ~8.4 credits/day, 87% waste. Matched to once-daily data arrival.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="sql"><code><span class="k">ALTER</span> <span class="k">TASK</span> load_spotify_task <span class="k">SET</span> <span class="k">SCHEDULE</span> = <span class="s">&#x27;<span class="k">USING</span> CRON 0 3 * * * America/Chicago&#x27;</span>;</code></pre></div>
+</article>
+<article class="step" id="s1e">
+  <div class="step-head"><span class="step-id">1e</span><h3>Deploy + verify</h3></div>
+  <p class="prose"><code>CREATE OR REPLACE TASK</code> always lands suspended — resume, force a run, then verify state instead of trusting silence.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="sql"><code><span class="k">ALTER</span> <span class="k">TASK</span> load_spotify_task <span class="k">RESUME</span>;
+<span class="k">EXECUTE</span> <span class="k">TASK</span> load_spotify_task;
+
+<span class="k">SELECT</span> <span class="k">GET_DDL</span>(<span class="s">&#x27;<span class="k">TASK</span>&#x27;</span>,<span class="s">&#x27;spotify_db.raw.load_spotify_task&#x27;</span>);   <span class="c">-- 4 INSERTs + CRON present?</span>
+<span class="k">SELECT</span> * <span class="k">FROM</span> load_log <span class="k">ORDER</span> <span class="k">BY</span> log_id <span class="k">DESC</span> <span class="k">LIMIT</span> 8;         <span class="c">-- 4 rows, one shared run_id</span></code></pre></div>
+</article>
+</section><section class="phase" id="p2" style="--pc:#FF99A4">
+  <header class="phase-head">
+    <span class="phase-num">Phase&nbsp;2</span>
+    <h2>Monitor</h2>
+    <p class="phase-sub">Hand the run identity from load to digest explicitly, and classify every run.</p>
+  </header>
+  <article class="step" id="s2a">
+  <div class="step-head"><span class="step-id">2a</span><h3>The handoff table</h3></div>
+  <p class="prose">A row's <em>existence</em> = "the run finished." A mid-flight abort writes no row, so the digest correctly reports it as failed.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="sql"><code><span class="k">CREATE</span> <span class="k">OR</span> <span class="k">REPLACE</span> <span class="k">TABLE</span> spotify_db.raw.pipeline_state (
+  run_id        <span class="k">STRING</span>,
+  completed_at  <span class="k">TIMESTAMP_NTZ</span>,
+  tables_loaded <span class="k">NUMBER</span>
+);</code></pre></div>
+</article>
+<article class="step" id="s2b">
+  <div class="step-head"><span class="step-id">2b</span><h3>The digest-staging table</h3></div>
+  <p class="prose">What the digest <em>would</em> email — proven before SendGrid exists.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="sql"><code><span class="k">CREATE</span> <span class="k">OR</span> <span class="k">REPLACE</span> <span class="k">TABLE</span> spotify_db.raw.digest_log (
+  digest_id      <span class="k">NUMBER</span> <span class="k">AUTOINCREMENT</span>,
+  fired_at       <span class="k">TIMESTAMP_NTZ</span> <span class="k">DEFAULT</span> <span class="k">CURRENT_TIMESTAMP</span>(),
+  load_state     <span class="k">STRING</span>,
+  load_run_id    <span class="k">STRING</span>,
+  tables_logged  <span class="k">INT</span>,
+  new_rows       <span class="k">INT</span>,
+  refreshed_rows <span class="k">INT</span>,
+  subject_line   <span class="k">STRING</span>
+);</code></pre></div>
+</article>
+<article class="step" id="s2c">
+  <div class="step-head"><span class="step-id">2c</span><h3>The digest task</h3></div>
+  <p class="prose">Independent schedule, not <code>AFTER</code> — a chained child fires only on parent <em>success</em>, so it would go silent on the morning the load breaks. Reads the handoff, classifies, composes a subject.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="sql"><code><span class="k">CREATE</span> <span class="k">OR</span> <span class="k">REPLACE</span> <span class="k">TASK</span> digest_task
+  <span class="k">WAREHOUSE</span> = spotify_wh
+  <span class="k">SCHEDULE</span> = <span class="s">&#x27;<span class="k">USING</span> CRON 20 3 * * * America/Chicago&#x27;</span>
+<span class="k">AS</span>
+<span class="k">BEGIN</span>
+  <span class="k">LET</span> latest_run <span class="k">STRING</span> := (<span class="k">SELECT</span> run_id <span class="k">FROM</span> spotify_db.raw.pipeline_state
+                            <span class="k">WHERE</span> completed_at &gt;= <span class="k">DATEADD</span>(<span class="s">&#x27;hour&#x27;</span>,-2,<span class="k">CURRENT_TIMESTAMP</span>())
+                            <span class="k">ORDER</span> <span class="k">BY</span> completed_at <span class="k">DESC</span> <span class="k">LIMIT</span> 1);
+  <span class="k">INSERT</span> <span class="k">INTO</span> spotify_db.raw.digest_log
+    (load_state, load_run_id, tables_logged, new_rows, refreshed_rows, subject_line)
+  <span class="k">SELECT</span>
+    <span class="k">CASE</span> <span class="k">WHEN</span> agg.tables_logged <span class="k">IS</span> <span class="k">NULL</span> <span class="k">THEN</span> <span class="s">&#x27;NO_RUN&#x27;</span>
+         <span class="k">WHEN</span> agg.tables_logged &lt; 4     <span class="k">THEN</span> <span class="s">&#x27;PARTIAL&#x27;</span>
+         ELSE <span class="s">&#x27;COMPLETE&#x27;</span> <span class="k">END</span>,
+    :latest_run, agg.tables_logged, agg.new_rows, agg.refreshed_rows,
+    <span class="k">CASE</span> <span class="k">WHEN</span> agg.tables_logged <span class="k">IS</span> <span class="k">NULL</span> <span class="k">THEN</span> <span class="s">&#x27;ALERT Spotify pipeline: no load run detected&#x27;</span>
+         <span class="k">WHEN</span> agg.tables_logged &lt; 4     <span class="k">THEN</span> <span class="s">&#x27;ALERT Spotify pipeline: partial load (&#x27;</span> || agg.tables_logged || <span class="s">&#x27;/4 tables)&#x27;</span>
+         <span class="k">WHEN</span> agg.new_rows &gt; 0          <span class="k">THEN</span> <span class="s">&#x27;Spotify pipeline: &#x27;</span> || agg.new_rows || <span class="s">&#x27; new rows&#x27;</span>
+         ELSE <span class="s">&#x27;Spotify pipeline: no changes&#x27;</span> <span class="k">END</span>
+  <span class="k">FROM</span> (
+    <span class="k">SELECT</span> <span class="k">COUNT</span>(*) <span class="k">AS</span> tables_logged, <span class="k">SUM</span>(rows_inserted) <span class="k">AS</span> new_rows, <span class="k">SUM</span>(rows_updated) <span class="k">AS</span> refreshed_rows
+    <span class="k">FROM</span> spotify_db.raw.load_log <span class="k">WHERE</span> run_id = :latest_run
+  ) agg;
+<span class="k">END</span>;</code></pre></div>
+</article>
+</section><section class="phase" id="p3" style="--pc:#FFD581">
+  <header class="phase-head">
+    <span class="phase-num">Phase&nbsp;3</span>
+    <h2>The email function</h2>
+    <p class="phase-sub">A headless program: key-pair auth, read the run + GCS files, compose the HTML.</p>
+  </header>
+  <article class="step" id="s3a">
+  <div class="step-head"><span class="step-id">3a</span><h3>Generate the RSA key pair</h3></div>
+  <p class="prose">A Cloud Function has no browser, so browser-SSO can't work at 3:20 AM. Key-pair auth: sign with the private key, Snowflake verifies with the public. <code>-topk8</code> = PKCS#8 (the only format Snowflake accepts); <code>-nocrypt</code> because Secret Manager handles encryption.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="bash"><code><span class="k">openssl</span> genrsa 2048 | <span class="k">openssl</span> pkcs8 -topk8 -inform PEM -out snowflake_key.p8 -nocrypt
+<span class="k">openssl</span> rsa -in snowflake_key.p8 -pubout -out snowflake_key.pub
+<span class="k">echo</span> &quot;*.p8&quot; &gt;&gt; .gitignore</code></pre></div>
+</article>
+<article class="step" id="s3b">
+  <div class="step-head"><span class="step-id">3b</span><h3>Register the public key</h3></div>
+  <p class="prose">Produce the one-line body with the machine — never by hand (a hand-join once dropped the trailing exponent block and Snowflake rejected it).</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="bash"><code><span class="k">grep</span> -v &quot;PUBLIC KEY&quot; snowflake_key.pub | <span class="k">tr</span> -d &<span class="c">#x27;\n&#x27;</span></code></pre></div><div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="sql"><code><span class="k">ALTER</span> USER PINTU <span class="k">SET</span> RSA_PUBLIC_KEY=&#x27;&lt;paste the one-line output&gt;&#x27;;
+<span class="k">DESC</span> USER PINTU;   <span class="c">-- confirm RSA_PUBLIC_KEY_FP set <span class="k">AND</span> HAS_KEYPAIR=true</span></code></pre></div>
+</article>
+<article class="step" id="s3c">
+  <div class="step-head"><span class="step-id">3c</span><h3>Prove headless auth locally</h3></div>
+  <p class="prose">Throwaway test — if it prints your user with no browser popup, the whole phase is safe to build on.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="python"><code><span class="k">from</span> cryptography.hazmat.primitives <span class="k">import</span> serialization
+<span class="k">import</span> snowflake.connector
+
+<span class="k">with</span> <span class="k">open</span>(<span class="s">&quot;snowflake_key.p8&quot;</span>,<span class="s">&quot;rb&quot;</span>) <span class="k">as</span> f:
+    pkey = serialization.load_pem_private_key(f.read(), password=<span class="k">None</span>)
+pkb = pkey.private_bytes(
+    encoding=serialization.Encoding.DER,
+    format=serialization.PrivateFormat.PKCS8,
+    encryption_algorithm=serialization.NoEncryption())
+
+conn = snowflake.connector.connect(
+    account=<span class="s">&quot;GIHJUIA-ZR03463&quot;</span>, user=<span class="s">&quot;PINTU&quot;</span>, private_key=pkb,
+    warehouse=<span class="s">&quot;SPOTIFY_WH&quot;</span>, database=<span class="s">&quot;SPOTIFY_DB&quot;</span>, schema=<span class="s">&quot;RAW&quot;</span>)
+cur = conn.cursor()
+cur.execute(<span class="s">&quot;SELECT CURRENT_USER(), CURRENT_ACCOUNT(), CURRENT_WAREHOUSE()&quot;</span>)
+<span class="k">print</span>(<span class="s">&quot;Connected <span class="k">as</span>:&quot;</span>, cur.fetchone())
+cur.close(); conn.close()</code></pre></div>
+</article>
+<article class="step" id="s3d">
+  <div class="step-head"><span class="step-id">3d</span><h3>digest_function/main.py</h3></div>
+  <p class="prose">Dual-mode: local reads the .p8 and writes a preview; RUNTIME=cloud reads Secret Manager and sends. This let the read/compose logic be proven on the laptop before any deploy.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="python"><code><span class="k">import</span> os, re
+<span class="k">from</span> cryptography.hazmat.primitives <span class="k">import</span> serialization
+<span class="k">from</span> google.cloud <span class="k">import</span> storage
+<span class="k">import</span> snowflake.connector
+
+ACCOUNT = <span class="s">&quot;GIHJUIA-ZR03463&quot;</span>
+USER = <span class="s">&quot;PINTU&quot;</span>
+BUCKET = <span class="s">&quot;spotify-etl-preetham&quot;</span>
+PROCESSED_PREFIX = <span class="s">&quot;raw_data/processed/&quot;</span>
+TRANSFORMED_PREFIX = <span class="s">&quot;transformed_data/&quot;</span>
+GCP_PROJECT = <span class="s">&quot;python-gcp-snowflake&quot;</span>
+EMAIL_TO = <span class="s">&quot;mukundmk1990@gmail.com&quot;</span>
+EMAIL_FROM = <span class="s">&quot;mukundmk1990@gmail.com&quot;</span>
+DATE_RE = re.compile(r<span class="s">&quot;_(\d{8})_&quot;</span>)
+IS_CLOUD = os.environ.get(<span class="s">&quot;RUNTIME&quot;</span>) == <span class="s">&quot;cloud&quot;</span>
+
+<span class="k">def</span> _secret(name):
+    <span class="k">from</span> google.cloud <span class="k">import</span> secretmanager
+    client = secretmanager.SecretManagerServiceClient()
+    path = f<span class="s">&quot;projects/{GCP_PROJECT}/secrets/{name}/versions/latest&quot;</span>
+    <span class="k">return</span> client.access_secret_version(name=path).payload.data
+
+<span class="k">def</span> get_private_key():
+    pem = _secret(<span class="s">&quot;snowflake_key&quot;</span>) <span class="k">if</span> IS_CLOUD <span class="k">else</span> <span class="k">open</span>(<span class="s">&quot;snowflake_key.p8&quot;</span>,<span class="s">&quot;rb&quot;</span>).read()
+    pkey = serialization.load_pem_private_key(pem, password=<span class="k">None</span>)
+    <span class="k">return</span> pkey.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption())
+
+<span class="k">def</span> get_latest_run():
+    conn = snowflake.connector.connect(
+        account=ACCOUNT, user=USER, private_key=get_private_key(),
+        warehouse=<span class="s">&quot;SPOTIFY_WH&quot;</span>, database=<span class="s">&quot;SPOTIFY_DB&quot;</span>, schema=<span class="s">&quot;RAW&quot;</span>)
+    cur = conn.cursor()
+    cur.execute(<span class="s">&quot;SELECT run_id, completed_at, tables_loaded FROM pipeline_state ORDER BY completed_at DESC LIMIT 1&quot;</span>)
+    row = cur.fetchone()
+    <span class="k">if</span> row is <span class="k">None</span>:
+        cur.close(); conn.close(); <span class="k">return</span> <span class="k">None</span>, []
+    run_id, completed_at, tables_loaded = row
+    cur.execute(<span class="s">&quot;SELECT table_name, rows_inserted, rows_updated FROM load_log WHERE run_id = %s ORDER BY table_name&quot;</span>, (run_id,))
+    tables = cur.fetchall()
+    cur.close(); conn.close()
+    <span class="k">return</span> (run_id, completed_at, tables_loaded), tables
+
+<span class="k">def</span> _latest_date(blobs):
+    ds = [DATE_RE.search(b.name).group(1) <span class="k">for</span> b <span class="k">in</span> blobs <span class="k">if</span> DATE_RE.search(b.name)]
+    <span class="k">return</span> max(ds) <span class="k">if</span> ds <span class="k">else</span> <span class="k">None</span>
+
+<span class="k">def</span> list_processed():
+    client = storage.Client(project=GCP_PROJECT)
+    out = []
+    <span class="k">for</span> b <span class="k">in</span> client.list_blobs(BUCKET, prefix=PROCESSED_PREFIX):
+        <span class="k">if</span> b.name.endswith(<span class="s">&quot;/&quot;</span>): continue
+        out.append((b.name.split(<span class="s">&quot;/&quot;</span>)[-1], b.size, b.download_as_text().count(<span class="s">&quot;\n&quot;</span>)+1))
+    <span class="k">return</span> out
+
+<span class="k">def</span> list_transformed_latest():
+    client = storage.Client(project=GCP_PROJECT)
+    blobs = [b <span class="k">for</span> b <span class="k">in</span> client.list_blobs(BUCKET, prefix=TRANSFORMED_PREFIX) <span class="k">if</span> not b.name.endswith(<span class="s">&quot;/&quot;</span>)]
+    latest = _latest_date(blobs); out = []
+    <span class="k">for</span> b <span class="k">in</span> blobs:
+        m = DATE_RE.search(b.name)
+        <span class="k">if</span> m and m.group(1) == latest:
+            out.append((b.name.split(<span class="s">&quot;/&quot;</span>)[-1], b.size, max(b.download_as_text().count(<span class="s">&quot;\n&quot;</span>)-1,0)))
+    <span class="k">return</span> sorted(out), latest
+
+<span class="k">def</span> build(run, tables, processed, transformed, latest_date):
+    run_id, completed_at, tables_loaded = run
+    new_rows = sum(t[1] <span class="k">for</span> t <span class="k">in</span> tables)
+    complete = tables_loaded == 4
+    <span class="k">if</span> not complete:
+        subject, state, color = f<span class="s">&quot;Spotify pipeline: partial load ({tables_loaded}/4 tables)&quot;</span>, f<span class="s">&quot;PARTIAL ({tables_loaded}/4)&quot;</span>, <span class="s">&quot;<span class="c">#e0a800&quot;</span></span>
+    <span class="k">elif</span> new_rows &gt; 0:
+        subject, state, color = f<span class="s">&quot;Spotify pipeline: {new_rows} new rows&quot;</span>, <span class="s">&quot;COMPLETE&quot;</span>, <span class="s">&quot;<span class="c">#1DB954&quot;</span></span>
+    <span class="k">else</span>:
+        subject, state, color = <span class="s">&quot;Spotify pipeline: no changes&quot;</span>, <span class="s">&quot;COMPLETE&quot;</span>, <span class="s">&quot;<span class="c">#1DB954&quot;</span></span>
+    <span class="c"># ... compose HTML tables <span class="k">for</span> tables / processed / transformed ...</span>
+    <span class="k">return</span> subject, <span class="s">&quot;&lt;html&gt;...&lt;/html&gt;&quot;</span>
+
+<span class="k">def</span> send_email(subject, html):
+    <span class="k">from</span> sendgrid <span class="k">import</span> SendGridAPIClient
+    <span class="k">from</span> sendgrid.helpers.mail <span class="k">import</span> Mail
+    msg = Mail(from_email=EMAIL_FROM, to_emails=EMAIL_TO, subject=subject, html_content=html)
+    SendGridAPIClient(_secret(<span class="s">&quot;sendgrid_api_key&quot;</span>).decode()).send(msg)
+
+<span class="k">def</span> run_digest():
+    run, tables = get_latest_run()
+    <span class="k">if</span> run is <span class="k">None</span>:
+        <span class="k">return</span> <span class="s">&quot;Spotify pipeline: no load run detected&quot;</span>, <span class="s">&quot;&lt;p&gt;pipeline_state empty.&lt;/p&gt;&quot;</span>
+    processed = list_processed()
+    transformed, latest = list_transformed_latest()
+    <span class="k">return</span> build(run, tables, processed, transformed, latest)
+
+<span class="k">def</span> digest_pipeline(request):          <span class="c"># Cloud Function entry point</span>
+    subject, html = run_digest()
+    send_email(subject, html)
+    <span class="k">return</span> (subject, 200)
+
+<span class="k">if</span> __name__ == <span class="s">&quot;__main__&quot;</span>:             <span class="c"># local entry point (no send)</span>
+    subject, html = run_digest()
+    <span class="k">open</span>(<span class="s">&quot;digest_preview.html&quot;</span>,<span class="s">&quot;w&quot;</span>,encoding=<span class="s">&quot;utf-8&quot;</span>).write(html)
+    <span class="k">print</span>(<span class="s">&quot;SUBJECT:&quot;</span>, subject)</code></pre></div>
+</article>
+<article class="step" id="s3e">
+  <div class="step-head"><span class="step-id">3e</span><h3>requirements.txt + local test</h3></div>
+  <p class="prose">Prove it end-to-end on the laptop; open the preview in a browser.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="bash"><code><span class="c"># digest_function/requirements.txt:</span>
+<span class="c">#   snowflake-connector-<span class="k">python</span></span>
+<span class="c">#   cryptography</span>
+<span class="c">#   google-cloud-storage</span>
+<span class="c">#   google-cloud-secret-manager</span>
+<span class="c">#   sendgrid</span>
+
+<span class="k">pip</span> install google-cloud-storage google-cloud-secret-manager sendgrid
+<span class="k">gcloud</span> auth application-default login   <span class="c"># if GCS throws a credentials error</span>
+<span class="k">python</span> digest_function/main.py          <span class="c"># writes digest_preview.html</span></code></pre></div>
+</article>
+</section><section class="phase" id="p4" style="--pc:#FE6F61">
+  <header class="phase-head">
+    <span class="phase-num">Phase&nbsp;4</span>
+    <h2>Ship to the cloud</h2>
+    <p class="phase-sub">Secrets to Secret Manager, deploy, grant, schedule — running unattended at 3:20 AM.</p>
+  </header>
+  <article class="step" id="s4a">
+  <div class="step-head"><span class="step-id">4a</span><h3>Store the secrets</h3></div>
+  <p class="prose">The function can't reach your laptop, so secrets move to Secret Manager. Use a temp file for the API key so it never rides a shell command — and regenerate any key that touches a shell or chat.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="powershell"><code><span class="k">gcloud</span> secrets create snowflake_key <span class="fl">--data-file</span>=snowflake_key.p8
+<span class="c"># put the SG.xxxx key in sg_key.txt (Notepad, no trailing newline), then:</span>
+<span class="k">gcloud</span> secrets create sendgrid_api_key <span class="fl">--data-file</span>=sg_key.txt
+<span class="k">Remove-Item</span> sg_key.txt
+<span class="k">gcloud</span> secrets list</code></pre></div>
+</article>
+<article class="step" id="s4b">
+  <div class="step-head"><span class="step-id">4b</span><h3>Grant the runtime SA the two secrets</h3></div>
+  <p class="prose">Least privilege: it can read exactly these two secrets, nothing else.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="powershell"><code><span class="k">gcloud</span> secrets add-iam-policy-binding snowflake_key    <span class="fl">--member</span>=&quot;serviceAccount:429687740825-compute@developer.gserviceaccount.com&quot; <span class="fl">--role</span>=&quot;roles/secretmanager.secretAccessor&quot;
+<span class="k">gcloud</span> secrets add-iam-policy-binding sendgrid_api_key <span class="fl">--member</span>=&quot;serviceAccount:429687740825-compute@developer.gserviceaccount.com&quot; <span class="fl">--role</span>=&quot;roles/secretmanager.secretAccessor&quot; </code></pre></div>
+</article>
+<article class="step" id="s4c">
+  <div class="step-head"><span class="step-id">4c</span><h3>Deploy</h3></div>
+  <p class="prose">RUNTIME=cloud flips the function to Secret-Manager + SendGrid mode.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="powershell"><code><span class="k">gcloud</span> functions deploy spotify-digest `
+  <span class="fl">--gen</span>2 <span class="fl">--runtime</span>=python312 <span class="fl">--region</span>=us-central1 `
+  <span class="fl">--source</span>=digest_function <span class="fl">--entry-point</span>=digest_pipeline `
+  <span class="fl">--trigger-http</span> <span class="fl">--no-allow-unauthenticated</span> `
+  <span class="fl">--run-service-account</span>=429687740825-compute@developer.gserviceaccount.com `
+  <span class="fl">--set-env-vars</span>=RUNTIME=cloud `
+  <span class="fl">--memory</span>=512Mi <span class="fl">--timeout</span>=120s</code></pre></div>
+</article>
+<article class="step" id="s4d">
+  <div class="step-head"><span class="step-id">4d</span><h3>Grant invoke for OIDC</h3></div>
+  <p class="prose">gen2 functions run on Cloud Run — without this, the scheduler's call returns 403.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="powershell"><code><span class="k">gcloud</span> run services add-iam-policy-binding spotify-digest <span class="fl">--region</span>=us-central1 `
+  <span class="fl">--member</span>=&quot;serviceAccount:429687740825-compute@developer.gserviceaccount.com&quot; `
+  <span class="fl">--role</span>=&quot;roles/run.invoker&quot; </code></pre></div>
+</article>
+<article class="step" id="s4e">
+  <div class="step-head"><span class="step-id">4e</span><h3>Schedule daily at 3:20 AM</h3></div>
+  <p class="prose">Authenticated with an OIDC token whose audience equals the function URL.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="powershell"><code><span class="k">gcloud</span> scheduler jobs create http spotify-digest-daily `
+  <span class="fl">--location</span>=us-central1 `
+  <span class="fl">--schedule</span>=&quot;20 3 * * *&quot; `
+  <span class="fl">--time-zone</span>=&quot;America/Chicago&quot; `
+  <span class="fl">--uri</span>=&quot;https://us-central1-<span class="k">python</span>-gcp-snowflake.cloudfunctions.net/spotify-digest&quot; `
+  <span class="fl">--http-method</span>=POST `
+  <span class="fl">--oidc-service-account-email</span>=429687740825-compute@developer.gserviceaccount.com `
+  <span class="fl">--oidc-token-audience</span>=&quot;https://us-central1-<span class="k">python</span>-gcp-snowflake.cloudfunctions.net/spotify-digest&quot; </code></pre></div>
+</article>
+<article class="step" id="s4f">
+  <div class="step-head"><span class="step-id">4f</span><h3>Prove the scheduled path</h3></div>
+  <p class="prose">Don't wait for 3:20 AM — force it and check the inbox.</p>
+  <div class="code"><button class="copy" onclick="cp(this)">copy</button><pre class="powershell"><code><span class="k">gcloud</span> scheduler jobs run spotify-digest-daily <span class="fl">--location</span>=us-central1
+<span class="k">gcloud</span> scheduler jobs describe spotify-digest-daily <span class="fl">--location</span>=us-central1 <span class="fl">--format</span>=&quot;value(status.code,lastAttemptTime)&quot;
+<span class="c"># -&gt; empty/0 = success; email lands. Done.</span></code></pre></div>
+</article>
+</section>
+    <section class="gotchas" id="gotchas">
+      <h2>Gotchas learned the hard way</h2>
+      <p class="sub">Ten things that cost real time — each one now a one-line rule.</p>
+      <div class="glist"><div class="g"><h4>Capture sits immediately after its MERGE</h4><p>LAST_QUERY_ID() is positional. A statement in between makes RESULT_SCAN read the wrong result — a loud &#x27;invalid identifier&#x27; error, or (worse) silently wrong numbers. Safe inside the fixed task body; fragile when run by hand.</p></div><div class="g"><h4>NOT-MATCHED-only MERGE has no &#x27;rows updated&#x27; column</h4><p>The bridge MERGE only inserts, so its result set omits that column. Hardcode 0.</p></div><div class="g"><h4>CREATE OR REPLACE TASK always lands suspended</h4><p>RESUME after every rebuild, then verify with GET_DDL and SHOW TASKS.</p></div><div class="g"><h4>Ctrl+A grabs the whole worksheet</h4><p>It once smuggled a stray GET_DDL into a task body. Keep task definitions and scratch queries in separate worksheets.</p></div><div class="g"><h4>LET x := (SELECT ...) can silently return null</h4><p>In Snowflake Scripting the subquery-assignment returned null with no error. Inline the expression instead.</p></div><div class="g"><h4>Never hand-transcribe an RSA key</h4><p>A hand-join dropped the trailing exponent block. Pipe it: grep -v &quot;PUBLIC KEY&quot; key.pub | tr -d &#x27;\n&#x27;.</p></div><div class="g"><h4>&#x27;JWT token is invalid&#x27; = wrong account identifier</h4><p>The connection reached Snowflake; only the signature/issuer was rejected. Use the identifier that authenticates, not the locator or a stale one.</p></div><div class="g"><h4>printf is not a PowerShell command</h4><p>It failed and the key had been exposed. Use a temp file for secret upload; regenerate any exposed key.</p></div><div class="g"><h4>gen2 Cloud Functions are Cloud Run</h4><p>The caller needs roles/run.invoker for OIDC — even your own scheduler.</p></div><div class="g"><h4>Verify state, don&#x27;t trust silence</h4><p>GET_DDL / SHOW TASKS / re-query after every change. &#x27;Successfully created&#x27; with no error is not proof the object changed.</p></div></div>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <b>Spotify Pipeline — Build Log.</b> Companion to the Technical Design Doc. Every snippet copy-paste runnable; substitute your own account, project, bucket, and email. · Session 9, Aug 2026.
+</footer>
+
+<script>
+function cp(btn){
+  const code = btn.parentElement.querySelector('code');
+  const text = code.innerText;
+  navigator.clipboard.writeText(text).then(()=>{
+    const old = btn.textContent; btn.textContent='copied ✓'; btn.classList.add('done');
+    setTimeout(()=>{btn.textContent=old; btn.classList.remove('done');},1400);
+  }).catch(()=>{btn.textContent='press Ctrl+C';});
+}
+</script>
+</body></html>

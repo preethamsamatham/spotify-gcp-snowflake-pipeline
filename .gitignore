@@ -16,4 +16,9 @@ raw_data/
 
 # Editor/OS noise
 .vscode/
-.DS_Store
+.DS_Storesnowflake_key.p8
+*.p8
+
+digest_preview.html
+
+*.pub

@@ -1,7 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0061)file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Spotify → GCP → Snowflake — Technical Design Doc</title>
 <style>
@@ -93,249 +91,268 @@
     <span class="node live">transform</span><span class="arr">→</span>
     <span class="node live">GCS csv</span><span class="arr">→</span>
     <span class="node live">stage</span><span class="arr">→</span>
-    <span class="node live">TASK: stage+MERGE</span><span class="arr">→</span>
-    <span class="node live">Snowflake</span>
+    <span class="node live">TASK: COPY+MERGE+log</span><span class="arr">→</span>
+    <span class="node live">Snowflake</span><span class="arr">→</span>
+    <span class="node live">digest fn</span><span class="arr">→</span>
+    <span class="node live">email</span>
   </div>
   <h1>Spotify → GCP → Snowflake Pipeline</h1>
   <p class="sub">Technical Design Document &amp; Engineering Logbook · Preetham Samatham</p>
   <div class="meta-row">
-    <div class="m">Last updated<b>Aug 20, 2026 — Session 8</b></div>
-    <div class="m">Phase<b>Week 4 complete · pipeline end-to-end</b></div>
+    <div class="m">Last updated<b>Aug 25, 2026 — Session 9</b></div>
+    <div class="m">Phase<b>Week 5 · digest email SHIPPED</b></div>
     <div class="m">Repo<b>preethamsamatham/spotify-gcp-snowflake-pipeline</b></div>
   </div>
-  <div class="status-pill"><span class="dot"></span> Full pipeline running: Spotify → GCP → Snowflake, clean deduped tables ✓</div>
+  <div class="status-pill"><span class="dot"></span> Live + observable + self-reporting · daily HTML digest email (SPF/DKIM) shipped end-to-end ✓</div>
 </header>
 
 <div class="wrap">
 <nav class="toc">
   <div class="lbl">Overview</div>
-  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#goal">1 · Project goal</a>
-  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#arch">2 · Architecture</a>
-  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#model">3 · Data model</a>
-  <div class="lbl">Week 4 — Snowflake</div>
-  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#w4">★ Load stage summary</a>
-  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#w4objects">Snowflake objects</a>
-  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#w4merge">Staging + MERGE</a>
-  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#w4task">The recurring task</a>
+  <a href="#goal">1 · Project goal</a>
+  <a href="#arch">2 · Architecture</a>
+  <a href="#decisions">4 · Design decisions</a>
+  <a href="#model">5 · Data model</a>
+  <div class="lbl">Week 4 — Load stage</div>
+  <a href="#w4">★ Load stage summary</a>
+  <a href="#w4objects">Snowflake objects</a>
+  <a href="#w4merge">Staging + MERGE</a>
+  <div class="lbl">Week 5 — Monitoring</div>
+  <a href="#w5">★ Instrumentation summary</a>
+  <a href="#w5objects">Log &amp; state objects</a>
+  <a href="#w5cost">The cost story (280×)</a>
+  <a href="#w5outage">The Aug 19–24 outage</a>
+  <a href="#w5dq">Data-quality findings</a>
+  <a href="#w5email">Digest email (shipped)</a>
+  <a href="#w5war">War stories 25–33</a>
   <div class="lbl">Reference</div>
-  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#commands">Command cheat-sheet</a>
-  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#concepts">Doubts &amp; answers</a>
-  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#war">Debugging war stories</a>
-  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#next">Next steps</a>
-  <a href="file:///C:/Users/Preetham/Downloads/TDD-spotify-pipeline.html#constraints">Constraints</a>
+  <a href="#war">War stories (1–24)</a>
+  <a href="#next">Open items</a>
+  <a href="#constraints">Constraints</a>
 </nav>
 
 <main>
 
 <section id="goal">
-  <h2><span class="num">01</span> Project goal</h2>
-  <div class="card">An end-to-end, fully automated data pipeline: extract Spotify playlist data daily, store raw in GCS, transform into normalized tables, and auto-load into Snowflake — zero manual steps after deployment. Portfolio project for data engineer / data scientist interviews. <b>As of Session 8 the pipeline is complete end to end.</b></div>
+  <h2><span class="num">01</span> Project Goal</h2>
+  <p>An end-to-end, fully automated pipeline that pulls playlist data from the Spotify Web API daily, lands raw data in GCS, transforms it into normalized tables, and auto-loads it into Snowflake — zero manual steps after deployment — <b>plus instrumentation and a daily email digest that reports what each run did.</b> Built as a portfolio project for data-engineer / data-scientist interviews.</p>
+  <div class="note"><b>Ingestion note:</b> the original goal named Snowpipe auto-ingest. That path was built end-to-end but hit a persistent cross-cloud IAM bind error (war story #20) and was replaced with a scheduled COPY <b>task</b> — the shipping design.</div>
 </section>
 
 <section id="arch">
   <h2><span class="num">02</span> Architecture</h2>
-  <p class="lead">Three trigger styles across the pipeline: clock (extract), event (transform), and interval-poll (Snowflake load task).</p>
+  <p class="lead">Shipping state as of Week 5 — instrumented and monitored.</p>
+  <pre>Scheduler → extract → GCS raw → transform → GCS csv
+   → external stage → load_spotify_task (COPY→MERGE→instrument→handoff)
+   → clean tables
+   → digest_task (independent 3:20 schedule, reads handoff) → email</pre>
   <div class="card">
-    <p style="margin-bottom:0"><b>Full flow (all live):</b> Cloud Scheduler (2 AM) → <code class="i">extract-spotify</code> → GCS <code class="i">raw_data/to_process/</code> → <code class="i">transform-spotify</code> (event/Eventarc) → GCS <code class="i">transformed_data/</code> → Snowflake external stage → <code class="i">load_spotify_task</code> (every 5 min: COPY into staging → MERGE into final) → clean deduped warehouse tables. Extract→transform verified running autonomously 10 straight days (Aug 10–19).</p>
+    <p>Cloud Scheduler (2 AM) → <code class="i">extract-spotify</code> → GCS <code class="i">raw_data/to_process/</code> → <code class="i">transform-spotify</code> (Eventarc finalize event) → GCS <code class="i">transformed_data/</code> → Snowflake external stage → <b>scheduled COPY task</b> <code class="i">load_spotify_task</code> (daily CRON 3 AM: COPY→staging → MERGE→finals → write <code class="i">load_log</code> + <code class="i">pipeline_state</code>) → clean deduped tables → <b>independent</b> <code class="i">digest_task</code> (daily 3:20 AM: reads handoff, composes a status line) → email (SendGrid, Phase 3–4).</p>
   </div>
+  <div class="note"><b>Why the digest is a separate task, not a chained child:</b> a task chained with <code class="i">AFTER load_spotify_task</code> fires only when the parent <b>succeeds</b> — so on the one morning the pipeline breaks, no email is sent, which is exactly when you need it. An independent scheduled task fires regardless and reports SUCCEEDED / FAILED / PARTIAL / NO_RUN. Validated in practice by the Aug 19–24 outage (§W5.4).</div>
+</section>
+
+<section id="decisions">
+  <h2><span class="num">04</span> Key Design Decisions (Week 5 additions)</h2>
+  <p class="lead">The full table lives in the Markdown TDD; these are the decisions added this week.</p>
+  <table>
+    <tr><th>Decision</th><th>Choice</th><th>Why</th></tr>
+    <tr><td>Load cadence</td><td>Daily CRON 3 AM (was <code class="i">5 MINUTE</code>)</td><td>Source arrives once daily; 5-min = 288 runs/day, 287 no-ops. 8.4 credits/day for ~13s work/run (60s min-billing + 60s auto-suspend = 87% waste). Matched schedule to data → ~280× cut.</td></tr>
+    <tr><td>MERGE-count capture</td><td><code class="i">INSERT … RESULT_SCAN(LAST_QUERY_ID())</code> right after each MERGE → <code class="i">load_log</code></td><td>MERGE counts are ephemeral; <code class="i">RESULT_SCAN</code> grabs them before the next statement discards them. <code class="i">SQLROWCOUNT</code> collapses inserts+updates into one number — useless for "N new songs."</td></tr>
+    <tr><td>Run identity</td><td><code class="i">run_id</code> (UUID/run) + <code class="i">task_run_id</code> (per-MERGE query id)</td><td>Don't infer identity from ordering. <code class="i">run_id</code> groups a run; <code class="i">task_run_id</code> links each row to <code class="i">query_history</code>.</td></tr>
+    <tr><td>Digest trigger</td><td>Independent scheduled task, NOT <code class="i">AFTER</code></td><td>Chained child fires only on parent success → no alert the day it breaks. Independent schedule reports all four states.</td></tr>
+    <tr><td>Load→digest handoff</td><td>Parent writes <code class="i">pipeline_state</code> row last; digest reads it</td><td>Explicit key beats "latest row by timestamp," which breaks under concurrent/manual runs.</td></tr>
+    <tr><td>Digest signal</td><td>Always send; signal in subject line</td><td>Heartbeat (silence = broken) without alert fatigue (triage from the subject).</td></tr>
+  </table>
 </section>
 
 <section id="model">
-  <h2><span class="num">03</span> Data model — final verified state</h2>
-  <p class="lead"><span style="color:var(--signal-deep);font-weight:600">table</span> · <span style="color:#b8860b;font-weight:600">primary key</span> · <span style="color:var(--violet);font-weight:600">foreign key</span> · one row per key after MERGE.</p>
-  <div class="schema mono">
-    <span class="t">SONGS</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="pk">song_id (PK)</span>, name, duration_ms, explicit, track_number, <span class="fk">album_id (FK)</span>, added_at<span class="cnt">180 / 180 uniq</span><br>
-    <span class="t">ARTISTS</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="pk">artist_id (PK)</span>, name<span class="cnt">193 / 193 uniq</span><br>
-    <span class="t">ALBUMS</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="pk">album_id (PK)</span>, name, release_date, total_tracks<span class="cnt">131 / 131 uniq</span><br>
-    <span class="t">SONG_ARTISTS</span>&nbsp;<span class="pk">song_id + artist_id (composite PK)</span> — bridge<span class="cnt">445 / 445 uniq</span>
+  <h2><span class="num">05</span> Data Model</h2>
+  <div class="schema">
+<span class="t">SONGS</span> <span class="pk">song_id</span> (PK), name, duration_ms, explicit, track_number, <span class="fk">album_id</span> (FK), added_at <span class="cnt">183 keys</span><br>
+<span class="t">ARTISTS</span> <span class="pk">artist_id</span> (PK), name <span class="cnt">194</span><br>
+<span class="t">ALBUMS</span> <span class="pk">album_id</span> (PK), name, release_date, total_tracks <span class="cnt">133</span><br>
+<span class="t">SONG_ARTISTS</span> <span class="pk">song_id + artist_id</span> (composite) — bridge <span class="cnt">445</span>
   </div>
-  <div class="note"><b>Counts grew vs Week 3</b> (was 128 albums / 188 artists) because the playlist genuinely gained songs over the 10 autonomous days — real change captured. <code class="i">release_date</code> stays STRING (Spotify returns partial/year-only dates). Snowflake accepts PK constraints but does <b>not</b> enforce them — dedup is handled by MERGE.</div>
+  <p class="lead" style="margin-top:12px">Counts grew over autonomous days (real change captured over time). Note: a raw <code class="i">songs</code> CSV can carry more <i>rows</i> than distinct keys (187 vs 183) — a track re-added to the playlist repeats with a new <code class="i">added_at</code>; the MERGE collapses it. See §W5.5.</p>
 </section>
 
+<div class="wkbanner" style="margin-top:8px">
+  <h3>Week 4 — Snowflake Load Stage</h3>
+  <p>Sessions 7–8 · Aug 19–20 · staging + MERGE, scheduled task, Snowpipe pivot</p>
+</div>
+
 <section id="w4">
-  <h2 class="wk"><span class="num">★</span> Week 4 — Snowflake load stage</h2>
-  <div class="wkbanner"><h3>What this week accomplished</h3><p>Transformed CSVs now auto-load into Snowflake, deduplicated to one current row per key, via a scheduled task using a staging + MERGE pattern. This closes the pipeline end to end.</p></div>
-  <p class="lead">The core problem and its solution, in one picture:</p>
-  <div class="card">
-    <p><b>Problem:</b> extract pulls the full playlist daily → each CSV is a near-duplicate snapshot. Loading directly stacked ~20× duplicates (measured: <b>3,672 rows for 180 unique songs</b>).</p>
-    <pre>GCS CSVs → COPY into <span style="color:#e0a95c">STAGING</span> (raw, all snapshots)
-         → <span style="color:#e0a95c">MERGE</span> into <span style="color:#7fd4ca">FINAL</span> (dedup to newest-per-key, upsert)
-         → staging truncated next run</pre>
-    <p style="margin-bottom:0"><b>Result:</b> MERGE collapsed 1,836 staging rows → 180 clean song rows. Re-running the task on a clean target leaves counts unchanged = <b>idempotent</b> (safe to run forever).</p>
-  </div>
+  <h2 class="wk"><span class="num">W4</span> Load stage — what it accomplished</h2>
+  <p>Transformed CSVs now auto-load into Snowflake, deduplicated to one current row per key, via a scheduled task using a staging + MERGE pattern. The extract→transform chain ran <b>autonomously for 10 straight days</b> (Aug 10–19), each day dropping four timestamped CSVs — all collapsed into clean tables by MERGE.</p>
+  <table>
+    <tr><th>Table</th><th>Rows</th><th>Unique keys</th><th>Key</th></tr>
+    <tr><td>songs</td><td>180→183</td><td>=</td><td>song_id</td></tr>
+    <tr><td>albums</td><td>131→133</td><td>=</td><td>album_id</td></tr>
+    <tr><td>artists</td><td>193→194</td><td>=</td><td>artist_id</td></tr>
+    <tr><td>song_artists</td><td>445</td><td>=</td><td>song_id + artist_id</td></tr>
+  </table>
 </section>
 
 <section id="w4objects">
-  <h2 class="wk"><span class="num">3.1</span> Snowflake objects created</h2>
-  <div class="card"><ul class="clean">
-    <li><b>Warehouse</b> <code class="i">spotify_wh</code> — XSMALL, AUTO_SUSPEND=60, AUTO_RESUME=TRUE (compute separate from storage; auto-suspend = cost control).</li>
-    <li><b>Database/schema</b> <code class="i">spotify_db.raw</code>.</li>
-    <li><b>4 final tables</b> — typed columns; composite PK on song_artists; <code class="i">release_date</code> STRING for partial dates.</li>
-    <li><b>4 staging tables</b> <code class="i">*_staging</code> — <code class="i">CREATE TRANSIENT TABLE … LIKE</code> (transient = no fail-safe/time-travel → cheaper; correct for throwaway data).</li>
-    <li><b>Storage integration</b> <code class="i">spotify_gcs_int</code> — scoped to the <code class="i">transformed_data/</code> prefix; SA <code class="i">k16l50000@…</code> granted <code class="i">storage.objectViewer</code>.</li>
-    <li><b>File format</b> <code class="i">spotify_csv_format</code> — SKIP_HEADER=1, quote-enclosed (handles commas in song names).</li>
-    <li><b>External stage</b> <code class="i">spotify_stage</code> — <code class="i">LIST @spotify_stage</code> proved Snowflake reads the bucket.</li>
-    <li><b>Notification integration</b> <code class="i">spotify_pubsub_int</code> — QUEUE/GCP_PUBSUB (built for the abandoned Snowpipe path).</li>
-    <li><b>Task</b> <code class="i">load_spotify_task</code> — 5-minute schedule, runs the staging+MERGE block.</li>
-  </ul></div>
+  <h2 class="wk"><span class="num">W4</span> Snowflake objects</h2>
+  <ul class="clean">
+    <li><b>Warehouse</b> <code class="i">spotify_wh</code> — XSMALL, AUTO_SUSPEND=60, AUTO_RESUME.</li>
+    <li><b>4 final tables</b> (typed; <code class="i">release_date</code> STRING for partial dates) + <b>4 transient staging tables</b>.</li>
+    <li><b>Storage integration</b> <code class="i">spotify_gcs_int</code> — SA <code class="i">k16l50000@…</code> granted <code class="i">storage.objectViewer</code> on the bucket, scoped to <code class="i">transformed_data/</code>.</li>
+    <li><b>File format</b> <code class="i">spotify_csv_format</code>, <b>external stage</b> <code class="i">spotify_stage</code>, <b>task</b> <code class="i">load_spotify_task</code>.</li>
+    <li><b>Notification integration</b> <code class="i">spotify_pubsub_int</code> — built for the abandoned Snowpipe path.</li>
+  </ul>
 </section>
 
 <section id="w4merge">
-  <h2 class="wk"><span class="num">3.2</span> The MERGE</h2>
-  <p class="lead">The heart of the load — insert-or-update keyed on PK, with window-function dedup.</p>
-  <pre>MERGE INTO songs t
-USING (SELECT * FROM songs_staging
-       <span style="color:#e0a95c">QUALIFY ROW_NUMBER() OVER (PARTITION BY song_id ORDER BY added_at DESC)=1</span>) s
-ON t.song_id = s.song_id
-WHEN MATCHED THEN UPDATE SET t.name=s.name, t.duration_ms=s.duration_ms, …
-WHEN NOT MATCHED THEN INSERT (…) VALUES (…);</pre>
-  <div class="card" style="margin-top:14px">
-    <ul class="clean">
-      <li><b>The QUALIFY subquery</b> keeps only the newest row per key: partition by key, order newest-first, number the rows, keep #1. This dedups the source before merging.</li>
-      <li><b>ON</b> = the match key ("is this song already in the final table?").</li>
-      <li><b>WHEN MATCHED → UPDATE</b> (key exists, refresh to latest) · <b>WHEN NOT MATCHED → INSERT</b> (new key, add).</li>
-      <li><b>Bridge (song_artists) differs:</b> composite match on both columns, <code class="i">SELECT DISTINCT</code> (no "latest" concept), only <code class="i">WHEN NOT MATCHED</code> (the two columns are the whole row).</li>
-    </ul>
-  </div>
+  <h2 class="wk"><span class="num">W4</span> The load pattern (staging + MERGE)</h2>
+  <p>Loading daily snapshots directly stacked ~20× duplicates (<b>3,672 rows for 180 unique songs</b>). The upsert pattern fixes it:</p>
+  <pre>GCS CSVs → COPY into STAGING (all snapshots)
+         → MERGE into FINAL (QUALIFY ROW_NUMBER() picks newest-per-key, upsert)
+         → staging truncated next run</pre>
+  <p>Bridge MERGE differs: composite match, <code class="i">SELECT DISTINCT</code>, only <code class="i">WHEN NOT MATCHED</code> (the two columns are the whole row). The task carries <b>no <code class="i">FORCE=TRUE</code></b> — it relies on COPY load-history to skip already-loaded files.</p>
 </section>
 
-<section id="w4task">
-  <h2 class="wk"><span class="num">3.3</span> The recurring task</h2>
-  <div class="card">
-    <p><code class="i">load_spotify_task</code> (5-min schedule) runs, in a <code class="i">BEGIN…END</code> block: truncate staging → COPY new files into staging → four MERGEs into finals. Created suspended; activated with <code class="i">ALTER TASK … RESUME</code>.</p>
-    <p style="margin-bottom:0"><b>Critical: the task has NO <code class="i">FORCE=TRUE</code>.</b> It relies on COPY's load-history to skip already-loaded files, so each run ingests only new daily CSVs. <code class="i">FORCE=TRUE</code> was a one-time backfill tool only — in the recurring task it would reload everything every 5 minutes and duplicate endlessly.</p>
-  </div>
-  <div class="note"><b>The idempotency proof:</b> run the task, counts don't change — COPY finds no new files (load history), and MERGE upserts without duplicating. A pipeline you can run every 5 minutes forever without corrupting data.</div>
+<div class="wkbanner">
+  <h3>Week 5 — Instrumentation, Cost &amp; Monitoring</h3>
+  <p>Session 9 · Aug 20–25 · log tables, credit fix, digest task, outage &amp; recovery, digest email shipped</p>
+</div>
+
+<section id="w5">
+  <h2 class="wk"><span class="num">W5</span> Instrumentation — what it accomplished</h2>
+  <p>Turned a working-but-blind pipeline into an <b>observable</b> one. The load task now records what every run did, hands its identity to a monitoring task, and a daily digest reports status — and the whole thing survived a real multi-day GCS outage and recovered on its own, which the monitoring caught.</p>
+  <pre>load_spotify_task (COPY→MERGE) → load_log (per-table insert/update counts, run_id, task_run_id)
+                               → pipeline_state (run_id, completed_at, tables_loaded)   ← handoff
+digest_task (independent 3:20) → reads pipeline_state + load_log → digest_log (status + subject) → [email]</pre>
 </section>
 
-<section id="commands">
-  <h2><span class="num">⌘</span> Command cheat-sheet (Week 4)</h2>
-  <p class="lead">Grouped by tool. Full Week 1–3 commands are in the repo's earlier TDD.</p>
-
-  <div class="cmd-group"><h3>Pub/Sub (Snowpipe attempt)</h3>
-    <div class="cmd"><div class="desc"><b>Topic → bucket notification → subscription</b> — the event bridge GCS→Snowflake.</div>
-      <pre><span class="tok">gcloud</span> pubsub topics create spotify-snowpipe-topic
-<span class="tok">gcloud</span> storage buckets notifications create gs://<span class="arg">bucket</span> <span class="flag">--topic</span>=spotify-snowpipe-topic <span class="flag">--event-types</span>=OBJECT_FINALIZE
-<span class="tok">gcloud</span> pubsub subscriptions create spotify-snowpipe-sub <span class="flag">--topic</span>=spotify-snowpipe-topic <span class="flag">--ack-deadline</span>=600</pre></div>
-  </div>
-
-  <div class="cmd-group"><h3>Snowflake — setup</h3>
-    <div class="cmd"><div class="desc"><b>Verify cloud/region right after signup</b> (must match the bucket).</div>
-      <pre>SELECT CURRENT_REGION();  <span class="tok">-- want GCP_US_CENTRAL1</span></pre></div>
-    <div class="cmd"><div class="desc"><b>Warehouse, db, schema, tables, integration, file format, stage.</b></div>
-      <pre>CREATE WAREHOUSE spotify_wh WAREHOUSE_SIZE='XSMALL' AUTO_SUSPEND=60 AUTO_RESUME=TRUE;
-CREATE DATABASE spotify_db;  CREATE SCHEMA spotify_db.raw;
-CREATE STORAGE INTEGRATION spotify_gcs_int TYPE=EXTERNAL_STAGE STORAGE_PROVIDER='GCS'
-  ENABLED=TRUE STORAGE_ALLOWED_LOCATIONS=('gcs://<span class="arg">bucket</span>/transformed_data/');
-DESC STORAGE INTEGRATION spotify_gcs_int;   <span class="tok">-- get service account to grant</span>
-CREATE FILE FORMAT spotify_csv_format TYPE=CSV SKIP_HEADER=1 FIELD_OPTIONALLY_ENCLOSED_BY='"';
-CREATE STAGE spotify_stage URL='gcs://<span class="arg">bucket</span>/transformed_data/'
-  STORAGE_INTEGRATION=spotify_gcs_int FILE_FORMAT=spotify_csv_format;
-LIST @spotify_stage;   <span class="tok">-- proves Snowflake can read the bucket</span></pre></div>
-    <div class="cmd"><div class="desc"><b>Grant Snowflake's SA read on the bucket</b> (GCP side).</div>
-      <pre><span class="tok">gcloud</span> storage buckets add-iam-policy-binding gs://<span class="arg">bucket</span> \
-  <span class="flag">--member</span>=<span class="arg">"serviceAccount:k16l50000@…"</span> <span class="flag">--role</span>=<span class="arg">"roles/storage.objectViewer"</span></pre></div>
-  </div>
-
-  <div class="cmd-group"><h3>Snowflake — staging + MERGE + task</h3>
-    <div class="cmd"><div class="desc"><b>Transient staging + one-time backfill</b> (FORCE only here).</div>
-      <pre>CREATE TRANSIENT TABLE songs_staging LIKE songs;
-COPY INTO songs_staging FROM @spotify_stage PATTERN='.*/songs_.*\.csv' FILE_FORMAT=spotify_csv_format FORCE=TRUE;</pre></div>
-    <div class="cmd"><div class="desc"><b>Recurring task</b> — no FORCE; staging→MERGE every 5 min.</div>
-      <pre>CREATE OR REPLACE TASK load_spotify_task WAREHOUSE=spotify_wh SCHEDULE='5 MINUTE' AS
-BEGIN
-  TRUNCATE TABLE songs_staging; …
-  COPY INTO songs_staging FROM @spotify_stage PATTERN='.*/songs_.*\.csv' FILE_FORMAT=spotify_csv_format;
-  MERGE INTO songs t USING (…QUALIFY ROW_NUMBER()…=1) s ON t.song_id=s.song_id
-    WHEN MATCHED THEN UPDATE SET … WHEN NOT MATCHED THEN INSERT …;
-  …
-END;
-ALTER TASK load_spotify_task RESUME;
-EXECUTE TASK load_spotify_task;   <span class="tok">-- run once on demand</span></pre></div>
-    <div class="cmd"><div class="desc"><b>Verify clean + task success.</b></div>
-      <pre>SELECT name,state,error_message FROM TABLE(information_schema.task_history())
-  WHERE name='LOAD_SPOTIFY_TASK' ORDER BY scheduled_time DESC LIMIT 3;
-SELECT COUNT(*) total, COUNT(DISTINCT song_id) uniq FROM songs;   <span class="tok">-- 180 / 180</span></pre></div>
-  </div>
+<section id="w5objects">
+  <h2 class="wk"><span class="num">W5</span> New log &amp; state objects</h2>
+  <ul class="clean">
+    <li><b><code class="i">load_log</code></b> — one row per (table, run): <code class="i">log_id</code>, <code class="i">table_name</code>, <code class="i">rows_inserted</code>, <code class="i">rows_updated</code>, <code class="i">loaded_at</code>, <code class="i">run_id</code> (UUID, groups the 4 rows), <code class="i">task_run_id</code> (per-MERGE <code class="i">LAST_QUERY_ID()</code>, links to <code class="i">query_history</code>). Written by <code class="i">INSERT … SELECT … FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()))</code> right after each MERGE.</li>
+    <li><b><code class="i">pipeline_state</code></b> — the load→digest handoff. One row per completed run: <code class="i">run_id</code>, <code class="i">completed_at</code>, <code class="i">tables_loaded</code>. Written as the <b>last</b> statement of the load task — its <i>existence</i> is the "I finished" signal; a mid-flight abort writes no row.</li>
+    <li><b><code class="i">digest_log</code></b> — what the digest <i>would</i> email (Phase-1 staging before SendGrid): <code class="i">load_state</code> (COMPLETE/PARTIAL/NO_RUN), <code class="i">load_run_id</code>, <code class="i">tables_logged</code>, <code class="i">new_rows</code>, <code class="i">refreshed_rows</code>, <code class="i">subject_line</code>.</li>
+    <li><b><code class="i">digest_task</code></b> — independent scheduled task (CRON 3:20 AM), no <code class="i">AFTER</code>. Reads the latest <code class="i">pipeline_state</code> row, rolls up its <code class="i">load_log</code> rows, classifies, composes a subject.</li>
+  </ul>
 </section>
 
-<section id="concepts">
-  <h2><span class="num">Q</span> Doubts asked &amp; answered</h2>
-  <p class="lead">Interview revision deck. Week 4 first (newest), earlier weeks below.</p>
+<section id="w5cost">
+  <h2 class="wk"><span class="num">W5</span> The cost story — 280× reduction</h2>
+  <p class="lead">The strongest interview beat this week — a FinOps instinct most "finished pipeline" portfolios never exercise.</p>
+  <p><code class="i">warehouse_metering_history</code> showed the load burning <b>8.4 credits/day</b> for ~13 seconds of real work per run:</p>
+  <table>
+    <tr><th>Day</th><th>Credits</th><th>Note</th></tr>
+    <tr><td>Aug 11</td><td>0.077</td><td>manual worksheet poking</td></tr>
+    <tr><td>Aug 13</td><td>0.033</td><td>manual</td></tr>
+    <tr><td>Aug 19</td><td>5.28</td><td>5-min task went live</td></tr>
+    <tr><td>Aug 20</td><td>4.12</td><td>partial day → ~8.4/day</td></tr>
+  </table>
+  <p style="margin-top:12px">Root cause: at <code class="i">5 MINUTE</code> = <b>288 runs/day</b>, each billing a <b>60s minimum</b> on resume + <b>60s AUTO_SUSPEND</b> idle after ~13s of work → <b>87% waste</b>, and 287 of 288 runs are no-ops. Fix: <code class="i">USING CRON 0 3 * * * America/Chicago</code> → 1 run/day.</p>
+  <table>
+    <tr><th>Schedule</th><th>Runs/day</th><th>Credits/day</th><th>Runway (~190 cr)</th></tr>
+    <tr><td>5 MINUTE</td><td>288</td><td>8.4</td><td>~22 days</td></tr>
+    <tr><td>1 HOUR</td><td>24</td><td>0.70</td><td>~271 days</td></tr>
+    <tr><td>Daily CRON</td><td>1</td><td>0.03</td><td>~unlimited</td></tr>
+  </table>
+  <div class="note"><b>Framing:</b> "I polled every five minutes during development for fast feedback, then measured actual consumption and matched the schedule to the data-arrival rate — cutting credits ~280×. Polling frequency should follow the data, not developer impatience." <code class="i">EXECUTE TASK</code> still runs it on demand, so daily scheduling costs nothing during dev.</div>
+</section>
 
-  <div class="qa-sess">Session 8 — deep-dive doubts</div>
-  <details class="qa"><summary><span class="q">D1</span> Other GCS event types besides OBJECT_FINALIZE?<span class="chev">›</span></summary>
-    <div class="a"><code class="i">OBJECT_FINALIZE</code> (file created/finished — "arrived"), <code class="i">OBJECT_DELETE</code> (deleted), <code class="i">OBJECT_METADATA_UPDATE</code> (metadata changed, not content), <code class="i">OBJECT_ARCHIVE</code> (archived / version superseded). Filtered to FINALIZE only so deletes/metadata don't wake the loader for nothing.</div></details>
-  <details class="qa"><summary><span class="q">D2</span> Other event providers/types Snowflake listens to?<span class="chev">›</span></summary>
-    <div class="a">Providers (cloud-agnostic): <code class="i">GCP_PUBSUB</code>, <code class="i">AWS_SQS</code>/<code class="i">AWS_SNS</code>, <code class="i">AZURE_STORAGE_QUEUE</code>/Event Grid. Flavors: inbound auto-ingest (<code class="i">QUEUE</code>, <code class="i">INBOUND</code> — listen for file events), outbound error notifications (push Snowpipe errors to a queue), and email notifications (task-failure alerts).</div></details>
-  <details class="qa"><summary><span class="q">D3</span> What happens when AUTO_INGEST = FALSE?<span class="chev">›</span></summary>
-    <div class="a">The pipe does NOT listen for events; it loads only when triggered manually via Snowflake's REST API (<code class="i">insertFiles</code>). Used when your own application controls loading (upload a file, then tell Snowflake to load those specific files) rather than reacting to cloud events.</div></details>
-  <details class="qa"><summary><span class="q">D4</span> What does FORCE do? (FALSE is default)<span class="chev">›</span></summary>
-    <div class="a">COPY remembers every file it has loaded (load history, kept 64 days). <b>FORCE=FALSE</b> (default) = skip already-loaded files → re-running loads nothing (0 rows) — correct for a recurring job (only new files get in). <b>FORCE=TRUE</b> = ignore history, reload regardless — a one-time backfill tool. The MERGE design is immune to reloads anyway (upsert → no new duplicate row).</div></details>
-  <details class="qa"><summary><span class="q">D5</span> What is a "one-time backfill"?<span class="chev">›</span></summary>
-    <div class="a">Loading pre-existing <i>historical</i> data once to catch a table up to the present, vs ongoing loading of new data. Here: 10 days of CSVs already sat in the bucket → seed the tables once (with FORCE), then the task handles only new daily files (no FORCE). Analogy: copying a month of old letters into a new journal (backfill) vs writing tomorrow's entry (ongoing).</div></details>
-  <details class="qa"><summary><span class="q">D6</span> Why QUALIFY ROW_NUMBER()…? Any other way?<span class="chev">›</span></summary>
-    <div class="a">Keeps one row per key (the newest): partition by key, order newest-first, number rows, keep #1. <code class="i">QUALIFY</code> filters on a window function (<code class="i">WHERE</code> can't — it runs before the window computes). Alternatives: (1) subquery wrapping ROW_NUMBER + outer <code class="i">WHERE rn=1</code> (portable, no QUALIFY); (2) <code class="i">GROUP BY</code>+aggregate — only for per-column maxes, not the whole newest row; (3) <code class="i">RANK()</code>/<code class="i">DENSE_RANK()</code> — risky: ties share a rank → duplicates; ROW_NUMBER guarantees exactly one; (4) <code class="i">DISTINCT</code> — only collapses fully-identical rows (works for the bridge, not songs). Chose ROW_NUMBER for the on-ties guarantee, QUALIFY for readability.</div></details>
+<section id="w5outage">
+  <h2 class="wk"><span class="num">W5</span> The Aug 19–24 GCS outage — diagnosed by elimination, self-recovered</h2>
+  <p>The pipeline began <b>failing silently on Aug 19</b>. Every <code class="i">COPY</code>: <code class="i">Failed to access remote file: access denied</code> — while <code class="i">LIST @spotify_stage</code> <b>succeeded</b>. Snowflake could list the bucket but not read object contents.</p>
+  <p>Diagnosed by ruling everything out, in order:</p>
+  <ul class="clean">
+    <li><b>Snowflake config</b> — <code class="i">DESC INTEGRATION</code> correct, integration exists. ✓ not it.</li>
+    <li><b>Bucket IAM</b> — <code class="i">get-iam-policy</code>: <code class="i">objectViewer</code> bound, no condition, no deny. That role <i>does</i> include <code class="i">storage.objects.get</code>. ✓ not it.</li>
+    <li><b>CMEK</b> — top theory (LIST reads metadata; COPY must decrypt). <code class="i">buckets describe … encryption</code> → <b>null</b>. ✗ ruled out.</li>
+    <li><b>Billing</b> — $300/$300, 60 days, not suspended. ✗ ruled out.</li>
+    <li><b>Object readable?</b> — <code class="i">gcloud storage cp</code> of the exact file <b>as myself</b> succeeded (17.8 KiB). Only the Snowflake SA's read path failed.</li>
+    <li><b>Audit logs</b> — empty (GCS data-access logging off by default).</li>
+  </ul>
+  <p style="margin-top:10px">Every layer checked out, yet COPY denied. The break coincided <b>exactly</b> with creating <code class="i">spotify_pubsub_int</code> (the Snowpipe attempt) on Aug 19 09:27 — concurrent Pub/Sub/IAM changes. <b>It then healed on its own:</b> <code class="i">pipeline_state</code> timestamps show the <b>Aug 23 &amp; Aug 24 01:00 scheduled runs both succeeded</b> (<code class="i">tables_loaded=4</code>) with no fix — a transient cross-cloud access failure that cleared after propagation. Confirmed with a manual <code class="i">EXECUTE TASK</code> on Aug 24 → SUCCEEDED, 185 songs, four fresh <code class="i">load_log</code> rows, digest read COMPLETE.</p>
+  <div class="note"><b>Framing:</b> "A storage-integration COPY started failing with access-denied while LIST worked. I diagnosed by elimination — proved it wasn't the integration config, bucket IAM, encryption, or billing, and that the object was readable by me directly — narrowing it to a transient cross-cloud access failure during concurrent IAM changes. It self-recovered, which my <code class="i">pipeline_state</code> timestamps confirmed. The lesson: a pipeline with no monitoring fails in the dark — had the digest been live, I'd have had an alert the first morning."</div>
+</section>
 
-  <div class="qa-sess">Session 7 — Snowflake basics</div>
-  <details class="qa"><summary><span class="q">Q</span> Why a warehouse (Snowflake) vs object storage (GCS)?<span class="chev">›</span></summary>
-    <div class="a">GCS stores files cheaply but has no query engine — no joins, aggregations, or types. A warehouse loads data into a columnar, typed, indexed format for fast SQL and BI-tool access. Pattern: GCS = data lake (cheap storage), Snowflake = warehouse (fast analysis), the load task = the bridge.</div></details>
-  <details class="qa"><summary><span class="q">Q</span> Warehouse vs transactional database?<span class="chev">›</span></summary>
-    <div class="a">OLAP (analytics — big scans/joins; Snowflake/BigQuery/Redshift/Synapse) vs OLTP (app reads/writes one row at a time; Postgres/Cloud SQL/RDS/Azure SQL). This project is analytics → warehouse. Native warehouse per cloud: GCP→BigQuery, AWS→Redshift, Azure→Synapse. Snowflake is cloud-agnostic → portable.</div></details>
-  <details class="qa"><summary><span class="q">Q</span> Snowflake's headline architecture?<span class="chev">›</span></summary>
-    <div class="a">Separation of storage and compute — data in one layer; virtual warehouses provide independent, elastic compute against it; pay for each separately; multiple workloads hit the same data without contention. Three layers: storage, compute (warehouses), cloud services.</div></details>
-  <details class="qa"><summary><span class="q">Q</span> Does Snowflake enforce PRIMARY KEY?<span class="chev">›</span></summary>
-    <div class="a">No — PK/FK are optimizer/documentation metadata, NOT enforced (only NOT NULL is enforced). Dedup must be handled in the load — which is exactly what the MERGE does.</div></details>
-  <details class="qa"><summary><span class="q">Q</span> Storage integration vs notification integration?<span class="chev">›</span></summary>
-    <div class="a">Both are credential-less (Snowflake issues an SA identity you grant least-privilege; no keys exchanged). Storage integration = access to the bucket's <b>files</b>. Notification integration = connection to the bucket's <b>events</b> (a cloud queue, e.g. Pub/Sub).</div></details>
-  <details class="qa"><summary><span class="q">Q</span> Snowpipe vs scheduled COPY task?<span class="chev">›</span></summary>
-    <div class="a">Snowpipe = continuous, event-driven (a cloud notification triggers the load). Scheduled task = polling/batch (runs COPY on a timer). This project uses the task after the Snowpipe bind failed. Same outcome (auto-load); different trigger model.</div></details>
-  <details class="qa"><summary><span class="q">Q</span> Internal vs external stage? TRANSIENT tables? Topic vs subscription?<span class="chev">›</span></summary>
-    <div class="a"><b>Stage:</b> external → cloud storage you own (this project); internal → Snowflake-managed. <b>TRANSIENT:</b> no fail-safe/limited time-travel → cheaper; correct for throwaway staging. <b>Pub/Sub:</b> topic = broadcast channel (publishers send); subscription = listener (consumers read) — decouples producer (GCS) from consumer (Snowflake), which is why event systems scale.</div></details>
+<section id="w5dq">
+  <h2 class="wk"><span class="num">W5</span> Data-quality findings (from real data)</h2>
+  <div class="gap"><b>Dedup gap in transform.</b> One <code class="i">songs</code> CSV: <b>187 rows / 183 distinct <code class="i">song_id</code>s</b> — four tracks appear twice (identical but for <code class="i">added_at</code>) because re-adding a track to a playlist makes a second entry. <code class="i">build_songs</code> isn't deduping on <code class="i">song_id</code>. MERGE collapses it downstream (finals stay clean), but the CSV presents <code class="i">song_id</code> as a PK while holding duplicates.</div>
+  <div class="gap"><b>Null-name rows.</b> 3 rows carry empty <code class="i">name</code> + <code class="i">duration_ms=0</code> (unavailable/local tracks). Flowed to Snowflake for weeks unnoticed — a null/blank check belongs in the digest.</div>
+  <div class="gap"><b>File-count ≠ insert-count, by design.</b> A CSV is a full snapshot (~187 rows) while "new rows inserted" is ~0–3. The digest reports rows-in-file / distinct-keys / inserted / updated per table so the difference is self-explaining rather than looking broken every morning.</div>
+</section>
+
+<section id="w5email">
+  <h2 class="wk"><span class="num">W5</span> Digest email — Phases 3 &amp; 4 (SHIPPED end-to-end)</h2>
+  <p class="lead">The digest is now a live daily email, not just a log row. Proven end-to-end Aug 25 — delivered with <b>SPF pass + DKIM pass</b>.</p>
+  <pre>Cloud Scheduler (3:20 AM Central) → HTTP+OIDC → Cloud Function spotify-digest
+   → reads Secret Manager (snowflake_key, sendgrid_api_key)
+   → Snowflake HEADLESS (key-pair, no browser/Duo) → pipeline_state + load_log
+   → GCS processed/ (JSON lines) + transformed_data/ latest CSVs (rows)
+   → HTML + subject → SendGrid → inbox</pre>
+  <ul class="clean">
+    <li><b>Headless auth</b> — RSA key-pair (PKCS#8). Public half registered on <code class="i">PINTU</code> (<code class="i">ALTER USER … SET RSA_PUBLIC_KEY</code>, <code class="i">HAS_KEYPAIR=true</code>); the function signs a JWT with the private key, Snowflake verifies against the public. No shared secret; MFA bypassed. Proven with a local <code class="i">SELECT CURRENT_USER()</code> before any function code.</li>
+    <li><b>Secrets</b> — <code class="i">snowflake_key.p8</code> + SendGrid API key in Secret Manager, never in code/repo (<code class="i">*.p8</code> gitignored). Runtime SA granted <code class="i">secretAccessor</code> on only those two + <code class="i">run.invoker</code> + existing <code class="i">objectAdmin</code>. Least privilege.</li>
+    <li><b>Dual-mode <code class="i">main.py</code></b> — <code class="i">RUNTIME</code> env var: unset → reads local <code class="i">.p8</code>, writes <code class="i">digest_preview.html</code>; <code class="i">=cloud</code> → Secret Manager + SendGrid. Logic proven on the laptop before deploy.</li>
+    <li><b>Account gotcha</b> — one account, three ids: <code class="i">GIHJUIA-ZR03463</code> (connector, works), <code class="i">PAPZGUL-NT81381</code> (stale, fails JWT), <code class="i">PW76915</code> (locator). Use the one proven to connect.</li>
+  </ul>
+  <div class="note"><b>Framing:</b> "I made the pipeline self-reporting — a daily Cloud Function connects to Snowflake headlessly with key-pair auth, reads the run and the GCS artifacts, and emails an HTML digest via SendGrid, scheduled with authenticated OIDC. Secrets in Secret Manager, least-privilege SA, every layer proven locally before deploy."</div>
+</section>
+
+<section id="w5war">
+  <h2 class="wk"><span class="num">W5</span> Debugging War Stories 25–33</h2>
+  <div class="war"><span class="n">25</span><b>NOT-MATCHED-only MERGE has no "rows updated" column.</b> The bridge capture failed with <code class="i">invalid identifier '"number of rows updated"'</code> — a MERGE's result set only has columns for the clauses present, and the bridge has only <code class="i">WHEN NOT MATCHED</code>. Fix: hardcode <code class="i">0</code>. <span class="lesson">Loud failure — named the line/column; ~20 min.</span></div>
+  <div class="war"><span class="n">26</span><b><code class="i">CREATE OR REPLACE TASK</code> always lands suspended.</b> Sequence: REPLACE → <code class="i">RESUME</code> → <code class="i">EXECUTE TASK</code>. <span class="lesson">Verify with GET_DDL AND SHOW TASKS — not the absence of an error.</span></div>
+  <div class="war"><span class="n">27</span><b>Ctrl+A worksheet contamination.</b> Ctrl+A selects the whole worksheet — smuggled a stray <code class="i">GET_DDL</code> into the task body. <span class="lesson">Task defs in their own worksheet; verification queries in a scratch worksheet.</span></div>
+  <div class="war hot"><span class="n">28</span><b>Silent <code class="i">LET … := (SELECT …)</code> binding failure — the nastiest.</b> Returned <b>null</b> with no error; task SUCCEEDED, column silently null. Fix: inline <code class="i">LAST_QUERY_ID()</code>. <span class="lesson">Loud failures cost an hour; silent failures ship wrong data. Verify the state, don't trust the silence.</span></div>
+  <div class="war"><span class="n">29</span><b><code class="i">SYSTEM$TASK_RUNTIME_INFO('…GRAPH_RUN_GROUP_ID')</code> is null under EXECUTE TASK.</b> A key that only populates on the scheduled run can't be verified in dev. <span class="lesson">Chose <code class="i">LAST_QUERY_ID()</code> (always available).</span></div>
+  <div class="war"><span class="n">30</span><b>Hand-transcribing an RSA key dropped 6 chars.</b> The public key lost its trailing <code class="i">IDAQAB</code> (exponent block) → <code class="i">Invalid Public key</code>. <span class="lesson">Never hand-transcribe — pipe it: <code class="i">grep -v "PUBLIC KEY" key.pub | tr -d '\n'</code>.</span></div>
+  <div class="war"><span class="n">31</span><b><code class="i">JWT token is invalid</code> = account identifier, not the key.</b> First headless attempt passed the wrong account id; the connection reached Snowflake but the JWT issuer was rejected. <span class="lesson">A reached-but-rejected auth is an identifier problem, not network/key.</span></div>
+  <div class="war"><span class="n">32</span><b><code class="i">printf</code> secret upload failed silently in PowerShell.</b> Unix command in PowerShell → not stored, and the key had been exposed. <span class="lesson">Use a temp file + <code class="i">Remove-Item</code>; regenerate any key that touched a shell/chat.</span></div>
+  <div class="war"><span class="n">33</span><b>gen2 Cloud Function needs <code class="i">run.invoker</code> for OIDC.</b> Scheduler → authenticated function returned 403 until the SA got <code class="i">run.invoker</code> on the Cloud Run service (gen2 functions ARE Cloud Run). <span class="lesson"><code class="i">--no-allow-unauthenticated</code> means even your own scheduler must be granted invoke.</span></div>
 </section>
 
 <section id="war">
-  <h2><span class="num">✕</span> Debugging war stories</h2>
-  <p class="lead">Week 4 in red are the headliners — the Snowpipe bind saga and the MERGE-on-a-dirty-target trap.</p>
-
-  <div class="war hot"><span class="n">20</span><b>Snowpipe Pub/Sub bind failure — the big one (unresolved → pivoted)</b> — built the full path (topic, bucket notification, subscription, notification integration); <code class="i">CREATE PIPE … AUTO_INGEST=TRUE</code> repeatedly failed with <i>Could not monitor … PERMISSION_DENIED</i>. <span class="lesson">Verified the SA had <code class="i">pubsub.subscriber</code> (subscription + project + topic) AND <code class="i">pubsub.viewer</code> (project), all readable via get-iam-policy; confirmed integration's subscription name + SA matched; confirmed subscription↔topic link; waited out propagation (incl. 10 min); recreated the integration (SA unchanged); confirmed personal Gmail (no org policy). All correct, still failed — root cause never found. Pivoted to a scheduled COPY task. Framing: "built Snowpipe end to end, hit a persistent cross-cloud IAM bind error, pivoted — same outcome; can discuss event-driven vs batch."</span></div>
-  <div class="war hot"><span class="n">21</span><b>Task SUCCEEDED but tables re-duplicated</b> — counts ballooned (songs 2016/180). <span class="lesson">Cause: finals still held dupes from earlier manual FORCE=TRUE loads — MERGE dedups the source but can't dedup rows already in the target. Fix: reset to clean, then MERGE maintains cleanliness. Lesson: MERGE keeps a target clean only if it started clean.</span></div>
-  <div class="war"><span class="n">17</span><b>Wrong cloud at signup</b> — first Snowflake trial defaulted to AWS_US_EAST_2. Caught via <code class="i">CURRENT_REGION()</code> + the integration SA reading <code class="i">awsuseast2</code>. <span class="lesson">Recreated on GCP_US_CENTRAL1 (matching the bucket) via a +alias email. Verify CURRENT_REGION() right after signup.</span></div>
-  <div class="war"><span class="n">18</span><b>Snowsight runs only the statement under the cursor</b> — repeated "object does not exist" errors. <span class="lesson">Ctrl+A before Run to execute the whole worksheet.</span></div>
-  <div class="war"><span class="n">19</span><b>Regex PATTERN substring bug (recurred in SQL)</b> — <code class="i">.*artists_.*\.csv</code> also matched <code class="i">song_artists_…csv</code> → artists loaded 1261 rows. <span class="lesson">Anchor with a path separator: <code class="i">.*/artists_.*\.csv</code>.</span></div>
-  <div class="war"><span class="n">22</span><b>COPY load-history "0 files" confusion</b> — re-running COPY returned 0 rows because COPY skips already-loaded files (idempotency by design). <span class="lesson">Diagnosed with FORCE=TRUE as a one-time tool; also revealed 10 days of autonomous runs.</span></div>
-  <div class="war"><span class="n">23</span><b>BEGIN…END task parse error</b> — <code class="i">unexpected 'END'</code>. <span class="lesson">Run the whole block as one unit; collapse each MERGE to a single line.</span></div>
-  <div class="war"><span class="n">24</span><b>Snowflake reuses the same SA per account</b> — recreating the notification integration did NOT mint a new SA (stayed k26l…), so existing grants remained valid. Ruled out the "wrong SA after recreate" theory.</div>
-  <div class="note" style="margin-top:14px">War stories 1–16 (Weeks 1–3: PowerShell encoding, Spotify API migration, credential rotation, the file-write-in-loop bug, the inverted boolean guard, Eventarc IAM, the prevented infinite loop, etc.) are in the earlier TDD sections.</div>
+  <h2><span class="num">09</span> War Stories 1–24 (earlier weeks)</h2>
+  <p class="lead">Condensed; full text in the Markdown TDD.</p>
+  <div class="war"><span class="n">20</span><b>Snowpipe Pub/Sub bind failure (unresolved; pivoted).</b> Built the full event path; <code class="i">CREATE PIPE … AUTO_INGEST=TRUE</code> repeatedly failed <code class="i">PERMISSION_DENIED</code> despite every IAM grant verified. Root cause never found → pivoted to a scheduled COPY task. <span class="lesson">Same outcome; can discuss event-driven vs batch.</span></div>
+  <div class="war"><span class="n">21</span><b>Task SUCCEEDED but tables re-duplicated.</b> Finals held dupes from earlier <code class="i">FORCE=TRUE</code> loads — MERGE dedups the source, not rows already in the target. <span class="lesson">MERGE keeps a target clean only if it started clean.</span></div>
+  <div class="war"><span class="n">19</span><b>Regex PATTERN substring bug.</b> <code class="i">.*artists_.*</code> also matched <code class="i">song_artists_…</code>. Fix: anchor with a path separator <code class="i">.*/artists_.*</code>.</div>
+  <div class="war"><span class="n">16</span><b>Storage-trigger infinite loop (prevented).</b> The transform writes to the bucket it watches; a <code class="i">startswith("raw_data/to_process/")</code> guard rejects its own 5 self-events/run.</div>
+  <p class="lead" style="margin-top:10px">…plus #1–18, 22–24 (PowerShell UTF-16, auth-flow migration, credential rotation, false-pass cache test, Eventarc IAM, Snowsight cursor-run, BEGIN…END parse, SA-reuse) — see Markdown.</p>
 </section>
 
 <section id="next">
-  <h2><span class="num">→</span> Open items &amp; next steps</h2>
+  <h2><span class="num">11</span> Open Items / Next Steps</h2>
   <ol class="steps">
-    <li>Commit <code class="i">snowflake_setup.sql</code> (final state: tables, staging, integration, stage, file format, task, MERGEs) + the gcloud Pub/Sub commands as a note. <code class="i">git status</code> first.</li>
-    <li>Optional: drop the unused notification integration + Pub/Sub topic/subscription, or keep + document as the "Snowpipe attempt" (makes the war story tangible).</li>
-    <li><b>Week 5 — analytics + polish:</b> SQL on the clean tables (top artists via the bridge, duration distribution, release-date eras, added_at timeline); README + architecture diagram; task-failure monitoring/alerting; cost notes; embed screenshots.</li>
-    <li><b>Optional v2:</b> retry Snowpipe (fresh integration or Snowflake support) to convert polling → event-driven — a nice talking point.</li>
+    <li>Commit Week 5 work: updated <code class="i">snowflake_setup.sql</code> (log/state DDL + instrumented tasks), TDD (md+html). <code class="i">git status</code> first.</li>
+    <li><b>Digest Phase 3</b> — Cloud Function composing the actual email body (list GCS files + counts, read <code class="i">load_log</code>/<code class="i">pipeline_state</code>). Snowflake already computes every number.</li>
+    <li><b>Digest Phase 4</b> — SendGrid: API key in Secret Manager, function call wiring. (All credential steps manual.)</li>
+    <li><b>Rename</b> <code class="i">task_run_id</code> → <code class="i">merge_query_id</code> (it's a per-statement query id, not a task-run id). <b>Drop</b> dead <code class="i">run_ts</code> column.</li>
+    <li><b>Transform dedup</b> — decide fix-in-transform vs document; stop claiming per-PK dedup the code doesn't do. Add a null/blank check.</li>
+    <li><b>Headless Snowflake auth</b> (key-pair, no browser/Duo) before a real scheduled GCP trigger. Deferred.</li>
+    <li><b>Analytics</b> (eras, durations, artist frequency, timeline) + README/diagram; optional Looker BI layer.</li>
+    <li><b>ML recommender</b> — similarity over the <code class="i">song_artists</code> bridge; DIY cosine-similarity to learn the concepts, over the managed Vertex box.</li>
   </ol>
+  <div class="note"><b>⏳ Binding constraint:</b> Snowflake trial credits die <i>before</i> the calendar clock. At the old 8.4/day burn, ~22 days runway from ~9.5 used → out ~<b>Sep 12</b> vs ~Sep 18 expiry. The daily-CRON fix removes the burn, but capture screenshots / outputs / row counts <b>while the warehouse is alive</b> — a dead trial is an unrunnable portfolio project and gates the ML phase.</div>
 </section>
 
 <section id="constraints">
-  <h2><span class="num">§</span> Confirmed constraints &amp; final state</h2>
-  <div class="card"><ul class="clean">
-    <li>Spotify Premium dev-mode app (5-user cap, no popularity field).</li>
-    <li>GCP free trial: $300, ~$0 used, expires Oct 22, 2026.</li>
-    <li>Snowflake trial: <b>GCP / us-central1</b> (first attempt was AWS by mistake, recreated), 30 days, $400 ~untouched.</li>
-    <li>Deployed functions: <code class="i">extract-spotify</code> (gen2, HTTP, scheduled 2 AM) · <code class="i">transform-spotify</code> (gen2, Cloud Storage finalize trigger).</li>
-    <li>Snowflake: <code class="i">spotify_wh</code>, <code class="i">spotify_db.raw</code>, 4 final + 4 staging tables, <code class="i">spotify_gcs_int</code>, <code class="i">spotify_stage</code>, <code class="i">spotify_csv_format</code>, <code class="i">load_spotify_task</code> (5-min). <code class="i">spotify_pubsub_int</code> unused after Snowpipe pivot.</li>
-    <li><b>Pipeline status: COMPLETE end to end</b> — Spotify → extract → GCS → transform → GCS → Snowflake (task, staging + MERGE) → clean deduped tables. Week 5 polish remaining.</li>
-  </ul></div>
+  <h2><span class="num">12</span> Confirmed Constraints</h2>
+  <ul class="clean">
+    <li><b>Snowflake trial</b> — GCP / us-central1. ~200 credits, ~9.5 used; the 5-min task briefly burned 8.4/day before the daily-CRON fix. Credits expire before the calendar (~Sep 12 vs ~Sep 18).</li>
+    <li><b>GCP free trial</b> — $300 credit, ~$0 used, expires Oct 22, 2026. (Verified healthy during the W5.4 outage.)</li>
+    <li><b>Snowflake objects</b> — <code class="i">spotify_wh</code>, <code class="i">spotify_db.raw</code>, 4 final + 4 staging, <code class="i">spotify_gcs_int</code>, <code class="i">spotify_stage</code>, <code class="i">spotify_csv_format</code>, <code class="i">load_spotify_task</code> (daily 3 AM), <code class="i">digest_task</code> (daily 3:20 AM), + <code class="i">load_log</code> / <code class="i">pipeline_state</code> / <code class="i">digest_log</code>. <code class="i">PINTU</code> has key-pair auth (<code class="i">HAS_KEYPAIR=true</code>). Connector id <code class="i">GIHJUIA-ZR03463</code>.</li>
+    <li><b>GCP digest stack</b> — Cloud Function <code class="i">spotify-digest</code> (gen2, python312, <code class="i">RUNTIME=cloud</code>) · Cloud Scheduler <code class="i">spotify-digest-daily</code> (3:20 AM Central, HTTP+OIDC) · Secret Manager <code class="i">snowflake_key</code> + <code class="i">sendgrid_api_key</code> · SendGrid verified sender. Runtime SA: <code class="i">secretAccessor</code> (2 secrets) + <code class="i">run.invoker</code> + <code class="i">objectAdmin</code>.</li>
+    <li><b>Deployed functions</b> — <code class="i">extract-spotify</code> (gen2, HTTP, 2 AM) · <code class="i">transform-spotify</code> (gen2, GCS finalize) · <code class="i">spotify-digest</code> (gen2, scheduled 3:20 AM).</li>
+    <li><b>Pipeline status: COMPLETE + INSTRUMENTED + SELF-REPORTING end to end.</b> Daily HTML digest email (SPF/DKIM) shipped. Survived and self-recovered from a 5-day GCS outage. Remaining: analytics layer, ML recommender.</li>
+  </ul>
 </section>
 
 </main>
 </div>
 
-<footer>Living document — regenerated each session. Markdown (<code class="i">TDD-spotify-pipeline.md</code>) is the git source of truth; this HTML is the readable reference. · Spotify → GCP → Snowflake · Preetham Samatham · Session 8, Aug 20 2026</footer>
-
-
+<footer>
+  <b>Spotify → GCP → Snowflake Pipeline</b> — Technical Design Document. Markdown (<code>TDD-spotify-pipeline.md</code>) is the git source of truth; this HTML is the readable render. · Last updated Aug 24, 2026 (Session 9).
+</footer>
 
 </body></html>
