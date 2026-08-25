@@ -4,7 +4,7 @@ from spotipy.oauth2 import SpotifyOAuth
 import functions_framework
 from google.cloud import storage
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 
 
 PLAYLIST_ID = "1y4gcj5nrSvezfKmuOpExp" 
@@ -30,61 +30,31 @@ def get_spotify_client():
     access_token = token_info["access_token"]
     return spotipy.Spotify(auth=access_token)
 
-def get_playlist_snapshot_id(sp, playlist_id):
-    playlist = sp.playlist(playlist_id, fields="snapshot_id")
-    return playlist["snapshot_id"]
-
-
-def get_all_tracks(sp, playlist_id, snapshot_id, extracted_at):
+def get_all_tracks(sp, playlist_id):
     results = sp.playlist_items(playlist_id)
     tracks = []
-
     while results:
-        page_offset = results["offset"]
-
-        for page_index, item in enumerate(results["items"]):
-            if item["item"] is None:
-                continue
-
-            enriched_item = dict(item)
-            enriched_item["pipeline_metadata"] = {
-                "playlist_id": playlist_id,
-                "snapshot_id": snapshot_id,
-                "position": page_offset + page_index,
-                "extracted_at": extracted_at,
-            }
-            tracks.append(enriched_item)
-
-        if results["next"]:
+        for item in results['items']:
+            if item['item'] is None: 
+                continue # Check if the track is not None
+            tracks.append(item)
+        if results['next']:
             results = sp.next(results)
         else:
             results = None
-
     return tracks
 
 @functions_framework.http
-def extract_spotify(request):
+def extract_spotify(request):   
     sp = get_spotify_client()
-    extracted_at = datetime.now(timezone.utc)
-    extracted_at_iso = extracted_at.isoformat().replace("+00:00", "Z")
-    snapshot_id = get_playlist_snapshot_id(sp, PLAYLIST_ID)
-    tracks = get_all_tracks(
-        sp,
-        PLAYLIST_ID,
-        snapshot_id,
-        extracted_at_iso,
-    )
+    tracks = get_all_tracks(sp, PLAYLIST_ID)
     ndjson = "\n".join(json.dumps(track, ensure_ascii=False) for track in tracks)
-    filename = f"raw_data/to_process/spotify_raw_{extracted_at.strftime('%Y%m%d_%H%M%S')}.json"
+    filename = f"raw_data/to_process/spotify_raw_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     storage_client = storage.Client()
     bucket = storage_client.bucket("spotify-etl-preetham")
     blob = bucket.blob(filename)
     blob.upload_from_string(ndjson)
-    return (
-        f"Saved {len(tracks)} playlist entries "
-        f"for snapshot {snapshot_id} "
-        f"to gs://spotify-etl-preetham/{filename}"
-    )
+    return f"Saved {len(tracks)} tracks to gs://spotify-etl-preetham/{filename}"
 
 if __name__ == "__main__":
     sp = get_spotify_client()
