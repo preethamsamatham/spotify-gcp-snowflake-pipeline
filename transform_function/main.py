@@ -2,6 +2,10 @@ import pandas as pd
 import json
 from google.cloud import storage
 import functions_framework
+from datetime import datetime, timezone
+
+
+PLAYLIST_ID = "1y4gcj5nrSvezfKmuOpExp"
 
 
 
@@ -73,6 +77,34 @@ def build_song_artists(data):
             })
     return pd.DataFrame(song_artists).drop_duplicates(subset=["song_id", "artist_id"])
 
+
+def build_playlist_tracks(data, input_blob_name):
+    stamp = input_blob_name.split("spotify_raw_")[1].replace(".json", "")
+    fallback_extracted_at = (
+        datetime.strptime(stamp, "%Y%m%d_%H%M%S")
+        .replace(tzinfo=timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+    playlist_tracks = []
+
+    for fallback_position, record in enumerate(data):
+        if record["item"] is None:
+            continue
+
+        metadata = record.get("pipeline_metadata", {})
+        playlist_tracks.append({
+            "snapshot_id": metadata.get("snapshot_id", f"legacy_{stamp}"),
+            "playlist_id": metadata.get("playlist_id", PLAYLIST_ID),
+            "position": metadata.get("position", fallback_position),
+            "song_id": record["item"]["id"],
+            "added_at": record.get("added_at"),
+            "extracted_at": metadata.get("extracted_at", fallback_extracted_at),
+        })
+
+    return pd.DataFrame(playlist_tracks)
+
 def load_raw_from_gcs(bucket_name, blob_name):
     client = storage.Client()
     bucket = client.bucket(bucket_name)
@@ -100,20 +132,29 @@ def transform_gcs(bucket_name, input_blob_name):
     albums = build_albums(data)
     artists = build_artists(data)
     song_artists = build_song_artists(data)
+    playlist_tracks = build_playlist_tracks(data, input_blob_name)
 
     # 3. write each to GCS under transformed_data/ (your helper)
     # 3. write each to GCS under transformed_data/ with the raw file's timestamp
     stamp = input_blob_name.split("spotify_raw_")[1].replace(".json", "")
 
-    write_csv_to_gcs(songs,        bucket_name, f"transformed_data/songs_{stamp}.csv")
-    write_csv_to_gcs(albums,       bucket_name, f"transformed_data/albums_{stamp}.csv")
-    write_csv_to_gcs(artists,      bucket_name, f"transformed_data/artists_{stamp}.csv")
-    write_csv_to_gcs(song_artists, bucket_name, f"transformed_data/song_artists_{stamp}.csv")
+    write_csv_to_gcs(songs,           bucket_name, f"transformed_data/songs_{stamp}.csv")
+    write_csv_to_gcs(albums,          bucket_name, f"transformed_data/albums_{stamp}.csv")
+    write_csv_to_gcs(artists,         bucket_name, f"transformed_data/artists_{stamp}.csv")
+    write_csv_to_gcs(song_artists,    bucket_name, f"transformed_data/song_artists_{stamp}.csv")
+    write_csv_to_gcs(
+        playlist_tracks,
+        bucket_name,
+        f"transformed_data/playlist_tracks_{stamp}.csv",
+    )
 
     # 4. receipt
-    print(f"Transformed {input_blob_name} → "
-          f"{len(songs)} songs, {len(albums)} albums, "
-          f"{len(artists)} artists, {len(song_artists)} song-artist links")  
+    print(
+        f"Transformed {input_blob_name} → "
+        f"{len(songs)} songs, {len(albums)} albums, "
+        f"{len(artists)} artists, {len(song_artists)} song-artist links, "
+        f"{len(playlist_tracks)} playlist entries"
+    )  
 
     # 5. move the processed raw file out of the work queue
     dest = input_blob_name.replace("to_process/", "processed/")
