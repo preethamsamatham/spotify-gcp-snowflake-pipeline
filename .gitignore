@@ -22,3 +22,4 @@ raw_data/
 digest_preview.html
 
 *.pub
+.cache-*

@@ -1,0 +1,4 @@
+functions-framework==3.10.2
+google-cloud-secret-manager==2.30.0
+google-cloud-storage==3.13.0
+spotipy==2.26.0
