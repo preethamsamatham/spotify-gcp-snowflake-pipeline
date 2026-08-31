@@ -15,6 +15,10 @@ def get_secret(secret_name):
     response = client.access_secret_version(request={"name": secret_path})
     return response.payload.data.decode("UTF-8")
 
+def get_playlist_snapshot_id(sp, playlist_id):
+    playlist = sp.playlist(playlist_id, fields="snapshot_id")
+    return playlist["snapshot_id"]
+
 def get_spotify_client():
     client_id = get_secret("spotify-client-id")
     client_secret = get_secret("spotify-client-secret")
@@ -47,6 +51,7 @@ def get_all_tracks(sp, playlist_id):
 @functions_framework.http
 def extract_spotify(request):   
     sp = get_spotify_client()
+    snapshot_id = get_playlist_snapshot_id(sp, PLAYLIST_ID)
     tracks = get_all_tracks(sp, PLAYLIST_ID)
     ndjson = "\n".join(json.dumps(track, ensure_ascii=False) for track in tracks)
     filename = f"raw_data/to_process/spotify_raw_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
@@ -54,7 +59,10 @@ def extract_spotify(request):
     bucket = storage_client.bucket("spotify-etl-preetham")
     blob = bucket.blob(filename)
     blob.upload_from_string(ndjson)
-    return f"Saved {len(tracks)} tracks to gs://spotify-etl-preetham/{filename}"
+    return (
+        f"Saved {len(tracks)} tracks for snapshot {snapshot_id} "
+        f"to gs://spotify-etl-preetham/{filename}"
+        )
 
 if __name__ == "__main__":
     sp = get_spotify_client()
