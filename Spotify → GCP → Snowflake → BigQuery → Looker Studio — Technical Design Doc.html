@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<!-- saved from url=(0145)file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spotify → GCP → Snowflake → BigQuery → Looker Studio — Technical Design Doc</title>
+<style>
+  :root{
+    --ink:#0d1b2a;--ink-2:#1b2a3a;--paper:#f7f8fa;--card:#ffffff;--line:#e3e7ec;
+    --muted:#5b6b7c;--signal:#00b8a9;--signal-deep:#008f83;--amber:#e8a33d;
+    --violet:#7b6cf6;--rose:#e5556e;--code-bg:#0d1b2a;--code-fg:#cfe9e5;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--paper);line-height:1.6}
+  code,pre,.mono{font-family:"SF Mono",ui-monospace,"Cascadia Code","Fira Code",Menlo,Consolas,monospace}
+  header.hero{background:linear-gradient(135deg,var(--ink) 0%,var(--ink-2) 60%,#123 100%);color:#eaf2f4;padding:44px 32px 38px;border-bottom:3px solid var(--signal)}
+  .flow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font:600 12px/1 "SF Mono",ui-monospace,monospace;letter-spacing:.04em;color:var(--signal);margin-bottom:18px}
+  .flow .node{background:rgba(0,184,169,.12);border:1px solid rgba(0,184,169,.35);padding:6px 10px;border-radius:6px;white-space:nowrap;color:#bfeee8}
+  .flow .node.live{background:rgba(0,184,169,.28);border-color:var(--signal)}
+  .flow .arr{color:var(--signal);font-size:14px}
+  header.hero h1{margin:0 0 6px;font-size:30px;letter-spacing:-.02em;font-weight:750}
+  header.hero .sub{color:#9fb4c2;font-size:15px;margin:0}
+  .meta-row{display:flex;gap:26px;flex-wrap:wrap;margin-top:22px}
+  .meta-row .m{font-size:13px;color:#8fa6b6}
+  .meta-row .m b{display:block;color:#eaf2f4;font-size:14px;font-weight:600;margin-top:2px}
+  .status-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(0,184,169,.15);border:1px solid var(--signal);color:#bfeee8;padding:7px 14px;border-radius:100px;font:600 13px/1 "SF Mono",monospace;margin-top:20px}
+  .status-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--signal);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(0,184,169,.55)}70%{box-shadow:0 0 0 9px rgba(0,184,169,0)}100%{box-shadow:0 0 0 0 rgba(0,184,169,0)}}
+  .wrap{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:238px 1fr;gap:0}
+  nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;padding:26px 18px 40px;border-right:1px solid var(--line);background:#fbfcfd}
+  nav.toc .lbl{font:700 11px/1 "SF Mono",monospace;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin:18px 0 8px;padding-left:8px}
+  nav.toc a{display:block;padding:6px 10px;border-radius:6px;color:var(--ink-2);text-decoration:none;font-size:13px;border-left:2px solid transparent}
+  nav.toc a:hover{background:#eef6f5;color:var(--signal-deep);border-left-color:var(--signal)}
+  main{padding:34px 40px 90px;min-width:0}
+  section{margin-bottom:44px;scroll-margin-top:20px}
+  h2{font-size:21px;letter-spacing:-.01em;margin:0 0 4px;display:flex;align-items:center;gap:11px}
+  h2 .num{font:700 12px/1 "SF Mono",monospace;color:#fff;background:var(--signal-deep);padding:6px 8px;border-radius:6px;letter-spacing:.05em}
+  h2.wk .num{background:var(--violet)}
+  .lead{color:var(--muted);font-size:14.5px;margin:2px 0 18px}
+  p{margin:0 0 12px}
+  a.link{color:var(--signal-deep);text-decoration:none;border-bottom:1px solid rgba(0,143,131,.3)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:16px}
+  code.i{background:#eef2f5;color:#0b3d3a;padding:1.5px 6px;border-radius:5px;font-size:13px}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:15px 17px;border-radius:10px;overflow-x:auto;font-size:13px;line-height:1.55;margin:12px 0;border:1px solid #12314a}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:6px 0 4px}
+  th{text-align:left;background:var(--ink);color:#dbe8ee;padding:10px 12px;font-weight:600;font-size:12.5px}
+  th:first-child{border-top-left-radius:9px}th:last-child{border-top-right-radius:9px}
+  td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:nth-child(even) td{background:#fafbfc}
+  td:first-child{font-weight:600;color:var(--ink)}
+  .schema{background:var(--code-bg);color:var(--code-fg);border-radius:12px;padding:20px 22px;font-size:13px;line-height:1.9}
+  .schema .t{color:var(--signal);font-weight:700}.schema .pk{color:var(--amber)}.schema .fk{color:var(--violet)}.schema .cnt{color:#7fd4ca;float:right}
+  .war{border-left:4px solid var(--amber);background:#fffaf1;border-radius:0 10px 10px 0;padding:13px 18px;margin-bottom:11px}
+  .war b{color:#a86a12}.war .lesson{display:block;margin-top:5px;font-size:13px;color:#7a5a2a}.war .n{font:700 12px/1 "SF Mono",monospace;color:#c68a2a;margin-right:6px}
+  .war.hot{border-left-color:var(--rose);background:#fff5f7}.war.hot b{color:#b23a52}.war.hot .n{color:#c0415a}.war.hot .lesson{color:#8a3a4a}
+  details.qa{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--violet);border-radius:0 10px 10px 0;margin-bottom:9px;overflow:hidden}
+  details.qa summary{cursor:pointer;padding:13px 18px;font-weight:600;font-size:14.5px;color:var(--ink);list-style:none;display:flex;align-items:center;gap:10px}
+  details.qa summary::-webkit-details-marker{display:none}
+  details.qa summary .q{color:var(--violet);font:700 12px/1 "SF Mono",monospace;border:1px solid var(--violet);border-radius:5px;padding:4px 6px;white-space:nowrap}
+  details.qa summary .chev{margin-left:auto;transition:transform .2s;color:var(--muted)}
+  details.qa[open] summary .chev{transform:rotate(90deg)}
+  details.qa .a{padding:2px 18px 16px 52px;font-size:14px;color:var(--ink-2)}
+  .qa-sess{font:700 11px/1 "SF Mono",monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:20px 0 8px;padding-left:4px}
+  .gap{border-left:4px solid var(--rose);background:#fff5f7;border-radius:0 10px 10px 0;padding:11px 16px;margin-bottom:9px;font-size:14px}
+  .gap b{color:#b23a52}
+  ol.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+  ol.steps li{position:relative;padding:12px 16px 12px 52px;background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:9px;font-size:14px}
+  ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:14px;top:12px;width:26px;height:26px;background:var(--signal-deep);color:#fff;border-radius:7px;display:grid;place-items:center;font:700 13px/1 "SF Mono",monospace}
+  ul.clean{margin:0;padding-left:20px}ul.clean li{margin-bottom:6px;font-size:14px}
+  .note{background:#eef6f5;border:1px solid #cdeae6;border-radius:10px;padding:13px 17px;font-size:13.5px;color:#0b3d3a;margin:14px 0}
+  .note b{color:var(--signal-deep)}
+  .wkbanner{background:linear-gradient(135deg,#2a2350,#1b2a3a);color:#e9e4ff;border-radius:12px;padding:16px 22px;margin:0 0 22px;border:1px solid #3a3470}
+  .wkbanner h3{margin:0 0 3px;font-size:17px;color:#fff}.wkbanner p{margin:0;font-size:13.5px;color:#c3bce8}
+  .cmd-group{margin-bottom:22px}
+  .cmd-group h3{font:700 13px/1 "SF Mono",monospace;letter-spacing:.04em;color:var(--ink);text-transform:uppercase;margin:0 0 10px;padding-bottom:7px;border-bottom:2px solid var(--signal);display:inline-block}
+  .cmd{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden}
+  .cmd .desc{font-size:13px;color:var(--muted);padding:9px 14px 0}.cmd .desc b{color:var(--ink-2)}
+  .cmd pre{margin:8px 12px 12px;font-size:12.5px;padding:11px 13px}
+  .cmd .tok{color:#7fd4ca}.cmd .flag{color:#e0a95c}.cmd .arg{color:#9db4c4}
+  footer{border-top:1px solid var(--line);padding:26px 40px;color:var(--muted);font-size:13px;max-width:1180px;margin:0 auto}
+  @media(max-width:860px){.wrap{grid-template-columns:1fr}nav.toc{position:static;height:auto;border-right:none;border-bottom:1px solid var(--line)}main{padding:24px 20px 60px}}
+  @media print{nav.toc{display:none}.wrap{display:block}details.qa .a{display:block!important}header.hero{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="flow">
+    <span class="node live">Scheduler</span><span class="arr">→</span>
+    <span class="node live">extract</span><span class="arr">→</span>
+    <span class="node live">GCS raw</span><span class="arr">→</span>
+    <span class="node live">transform</span><span class="arr">→</span>
+    <span class="node live">GCS csv</span><span class="arr">→</span>
+    <span class="node live">stage</span><span class="arr">→</span>
+    <span class="node live">TASK: COPY+MERGE+log</span><span class="arr">→</span>
+    <span class="node live">Snowflake</span><span class="arr">→</span>
+    <span class="node live">digest fn</span><span class="arr">→</span>
+    <span class="node live">email</span><span class="arr">↘</span>
+    <span class="node live">ANALYTICS views</span><span class="arr">→</span>
+    <span class="node">BigQuery (next)</span><span class="arr">→</span>
+    <span class="node">Looker Studio (next)</span>
+  </div>
+  <h1>Spotify → GCP → Snowflake → BigQuery → Looker Studio</h1>
+  <p class="sub">Technical Design Document &amp; Engineering Logbook · Preetham Samatham</p>
+  <div class="meta-row">
+    <div class="m">Last updated<b>Aug 25, 2026 — Session 10</b></div>
+    <div class="m">Phase<b>Week 6 · analytics serving layer IN PROGRESS</b></div>
+    <div class="m">Repo<b>preethamsamatham/spotify-gcp-snowflake-pipeline</b></div>
+  </div>
+  <div class="status-pill"><span class="dot"></span> Ingestion live · Snowflake analytics views validated · BigQuery and Looker Studio are the next implementation stage</div>
+</header>
+
+<div class="wrap">
+<nav class="toc">
+  <div class="lbl">Overview</div>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#goal">1 · Project goal</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#arch">2 · Architecture</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#decisions">4 · Design decisions</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#model">5 · Data model</a>
+  <div class="lbl">Week 4 — Load stage</div>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w4">★ Load stage summary</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w4objects">Snowflake objects</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w4merge">Staging + MERGE</a>
+  <div class="lbl">Week 5 — Monitoring</div>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w5">★ Instrumentation summary</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w5objects">Log &amp; state objects</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w5cost">The cost story (280×)</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w5outage">The Aug 19–24 outage</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w5dq">Data-quality findings</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w5email">Digest email (shipped)</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w5war">War stories 25–33</a>
+  <div class="lbl">Week 6 — BI serving layer</div>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w6">★ Session summary</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w6inventory">Environment inventory</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w6decisions">Architecture decisions</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w6profiling">Profiling &amp; data quality</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w6views">Analytics views</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w6consumer">Consumer &amp; dashboard</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w6membership">Membership limitation</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w6errors">Errors &amp; fixes</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#w6qa">Interview Q&amp;A</a>
+  <div class="lbl">Reference</div>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#war">War stories (1–24)</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#next">Open items</a>
+  <a href="file:///C:/Users/Preetham/Documents/Codex/2026-08-25/referenced-chatgpt-conversation-this-is-an/outputs/spotify-gcp-snowflake-tdd-session-10.html#constraints">Constraints</a>
+</nav>
+
+<main>
+
+<section id="goal">
+  <h2><span class="num">01</span> Project Goal</h2>
+  <p>An end-to-end, fully automated pipeline that pulls playlist data from the Spotify Web API daily, lands raw data in GCS, transforms it into normalized tables, and auto-loads it into Snowflake — zero manual steps after deployment — <b>plus instrumentation and a daily email digest that reports what each run did.</b> Built as a portfolio project for data-engineer / data-scientist interviews.</p>
+  <div class="note"><b>Ingestion note:</b> the original goal named Snowpipe auto-ingest. That path was built end-to-end but hit a persistent cross-cloud IAM bind error (war story #20) and was replaced with a scheduled COPY <b>task</b> — the shipping design.</div>
+</section>
+
+<section id="arch">
+  <h2><span class="num">02</span> Architecture</h2>
+  <p class="lead">Shipping ingestion state as of Week 5, plus the validated Week 6 analytics foundation.</p>
+  <pre>Scheduler → extract → GCS raw → transform → GCS csv
+   → external stage → load_spotify_task (COPY→MERGE→instrument→handoff)
+   → clean tables
+   → digest_task (independent 3:20 schedule, reads handoff) → email</pre>
+  <div class="card">
+    <p>Cloud Scheduler (2 AM) → <code class="i">extract-spotify</code> → GCS <code class="i">raw_data/to_process/</code> → <code class="i">transform-spotify</code> (Eventarc finalize event) → GCS <code class="i">transformed_data/</code> → Snowflake external stage → <b>scheduled COPY task</b> <code class="i">load_spotify_task</code> (daily CRON 3 AM: COPY→staging → MERGE→finals → write <code class="i">load_log</code> + <code class="i">pipeline_state</code>) → clean deduped tables → <b>independent</b> <code class="i">digest_task</code> (daily 3:20 AM: reads handoff, composes a status line) → email (SendGrid, Phase 3–4).</p>
+  </div>
+  <div class="card"><p><b>Week 6 analytics extension:</b> Snowflake remains the source of truth. Curated views in <code class="i">SPOTIFY_DB.ANALYTICS</code> will be published into BigQuery as a BI serving layer, and Looker Studio will connect to BigQuery natively. The BigQuery dataset and synchronization job have not been created yet.</p></div>
+  <div class="note"><b>Why the digest is a separate task, not a chained child:</b> a task chained with <code class="i">AFTER load_spotify_task</code> fires only when the parent <b>succeeds</b> — so on the one morning the pipeline breaks, no email is sent, which is exactly when you need it. An independent scheduled task fires regardless and reports SUCCEEDED / FAILED / PARTIAL / NO_RUN. Validated in practice by the Aug 19–24 outage (§W5.4).</div>
+</section>
+
+<section id="decisions">
+  <h2><span class="num">04</span> Key Design Decisions (Week 5 additions)</h2>
+  <p class="lead">The full table lives in the Markdown TDD; these are the decisions added this week.</p>
+  <table>
+    <tbody><tr><th>Decision</th><th>Choice</th><th>Why</th></tr>
+    <tr><td>Load cadence</td><td>Daily CRON 3 AM (was <code class="i">5 MINUTE</code>)</td><td>Source arrives once daily; 5-min = 288 runs/day, 287 no-ops. 8.4 credits/day for ~13s work/run (60s min-billing + 60s auto-suspend = 87% waste). Matched schedule to data → ~280× cut.</td></tr>
+    <tr><td>MERGE-count capture</td><td><code class="i">INSERT … RESULT_SCAN(LAST_QUERY_ID())</code> right after each MERGE → <code class="i">load_log</code></td><td>MERGE counts are ephemeral; <code class="i">RESULT_SCAN</code> grabs them before the next statement discards them. <code class="i">SQLROWCOUNT</code> collapses inserts+updates into one number — useless for "N new songs."</td></tr>
+    <tr><td>Run identity</td><td><code class="i">run_id</code> (UUID/run) + <code class="i">task_run_id</code> (per-MERGE query id)</td><td>Don't infer identity from ordering. <code class="i">run_id</code> groups a run; <code class="i">task_run_id</code> links each row to <code class="i">query_history</code>.</td></tr>
+    <tr><td>Digest trigger</td><td>Independent scheduled task, NOT <code class="i">AFTER</code></td><td>Chained child fires only on parent success → no alert the day it breaks. Independent schedule reports all four states.</td></tr>
+    <tr><td>Load→digest handoff</td><td>Parent writes <code class="i">pipeline_state</code> row last; digest reads it</td><td>Explicit key beats "latest row by timestamp," which breaks under concurrent/manual runs.</td></tr>
+    <tr><td>Digest signal</td><td>Always send; signal in subject line</td><td>Heartbeat (silence = broken) without alert fatigue (triage from the subject).</td></tr>
+  </tbody></table>
+</section>
+
+<section id="model">
+  <h2><span class="num">05</span> Data Model</h2>
+  <div class="schema">
+<span class="t">SONGS</span> <span class="pk">song_id</span> (PK), name, duration_ms, explicit, track_number, <span class="fk">album_id</span> (FK), added_at <span class="cnt">194 keys</span><br>
+<span class="t">ARTISTS</span> <span class="pk">artist_id</span> (PK), name <span class="cnt">207</span><br>
+<span class="t">ALBUMS</span> <span class="pk">album_id</span> (PK), name, release_date, total_tracks <span class="cnt">139</span><br>
+<span class="t">SONG_ARTISTS</span> <span class="pk">song_id + artist_id</span> (composite) — bridge <span class="cnt">490</span>
+  </div>
+  <p class="lead" style="margin-top:12px">Counts grew over autonomous days (real change captured over time). Note: a raw <code class="i">songs</code> CSV can carry more <i>rows</i> than distinct keys (187 vs 183) — a track re-added to the playlist repeats with a new <code class="i">added_at</code>; the MERGE collapses it. See §W5.5.</p>
+</section>
+
+<div class="wkbanner" style="margin-top:8px">
+  <h3>Week 4 — Snowflake Load Stage</h3>
+  <p>Sessions 7–8 · Aug 19–20 · staging + MERGE, scheduled task, Snowpipe pivot</p>
+</div>
+
+<section id="w4">
+  <h2 class="wk"><span class="num">W4</span> Load stage — what it accomplished</h2>
+  <p>Transformed CSVs now auto-load into Snowflake, deduplicated to one current row per key, via a scheduled task using a staging + MERGE pattern. The extract→transform chain ran <b>autonomously for 10 straight days</b> (Aug 10–19), each day dropping four timestamped CSVs — all collapsed into clean tables by MERGE.</p>
+  <table>
+    <tbody><tr><th>Table</th><th>Rows</th><th>Unique keys</th><th>Key</th></tr>
+    <tr><td>songs</td><td>180→183</td><td>=</td><td>song_id</td></tr>
+    <tr><td>albums</td><td>131→133</td><td>=</td><td>album_id</td></tr>
+    <tr><td>artists</td><td>193→194</td><td>=</td><td>artist_id</td></tr>
+    <tr><td>song_artists</td><td>445</td><td>=</td><td>song_id + artist_id</td></tr>
+  </tbody></table>
+</section>
+
+<section id="w4objects">
+  <h2 class="wk"><span class="num">W4</span> Snowflake objects</h2>
+  <ul class="clean">
+    <li><b>Warehouse</b> <code class="i">spotify_wh</code> — XSMALL, AUTO_SUSPEND=60, AUTO_RESUME.</li>
+    <li><b>4 final tables</b> (typed; <code class="i">release_date</code> STRING for partial dates) + <b>4 transient staging tables</b>.</li>
+    <li><b>Storage integration</b> <code class="i">spotify_gcs_int</code> — SA <code class="i">k16l50000@…</code> granted <code class="i">storage.objectViewer</code> on the bucket, scoped to <code class="i">transformed_data/</code>.</li>
+    <li><b>File format</b> <code class="i">spotify_csv_format</code>, <b>external stage</b> <code class="i">spotify_stage</code>, <b>task</b> <code class="i">load_spotify_task</code>.</li>
+    <li><b>Notification integration</b> <code class="i">spotify_pubsub_int</code> — built for the abandoned Snowpipe path.</li>
+  </ul>
+</section>
+
+<section id="w4merge">
+  <h2 class="wk"><span class="num">W4</span> The load pattern (staging + MERGE)</h2>
+  <p>Loading daily snapshots directly stacked ~20× duplicates (<b>3,672 rows for 180 unique songs</b>). The upsert pattern fixes it:</p>
+  <pre>GCS CSVs → COPY into STAGING (all snapshots)
+         → MERGE into FINAL (QUALIFY ROW_NUMBER() picks newest-per-key, upsert)
+         → staging truncated next run</pre>
+  <p>Bridge MERGE differs: composite match, <code class="i">SELECT DISTINCT</code>, only <code class="i">WHEN NOT MATCHED</code> (the two columns are the whole row). The task carries <b>no <code class="i">FORCE=TRUE</code></b> — it relies on COPY load-history to skip already-loaded files.</p>
+</section>
+
+<div class="wkbanner">
+  <h3>Week 5 — Instrumentation, Cost &amp; Monitoring</h3>
+  <p>Session 9 · Aug 20–25 · log tables, credit fix, digest task, outage &amp; recovery, digest email shipped</p>
+</div>
+
+<section id="w5">
+  <h2 class="wk"><span class="num">W5</span> Instrumentation — what it accomplished</h2>
+  <p>Turned a working-but-blind pipeline into an <b>observable</b> one. The load task now records what every run did, hands its identity to a monitoring task, and a daily digest reports status — and the whole thing survived a real multi-day GCS outage and recovered on its own, which the monitoring caught.</p>
+  <pre>load_spotify_task (COPY→MERGE) → load_log (per-table insert/update counts, run_id, task_run_id)
+                               → pipeline_state (run_id, completed_at, tables_loaded)   ← handoff
+digest_task (independent 3:20) → reads pipeline_state + load_log → digest_log (status + subject) → [email]</pre>
+</section>
+
+<section id="w5objects">
+  <h2 class="wk"><span class="num">W5</span> New log &amp; state objects</h2>
+  <ul class="clean">
+    <li><b><code class="i">load_log</code></b> — one row per (table, run): <code class="i">log_id</code>, <code class="i">table_name</code>, <code class="i">rows_inserted</code>, <code class="i">rows_updated</code>, <code class="i">loaded_at</code>, <code class="i">run_id</code> (UUID, groups the 4 rows), <code class="i">task_run_id</code> (per-MERGE <code class="i">LAST_QUERY_ID()</code>, links to <code class="i">query_history</code>). Written by <code class="i">INSERT … SELECT … FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()))</code> right after each MERGE.</li>
+    <li><b><code class="i">pipeline_state</code></b> — the load→digest handoff. One row per completed run: <code class="i">run_id</code>, <code class="i">completed_at</code>, <code class="i">tables_loaded</code>. Written as the <b>last</b> statement of the load task — its <i>existence</i> is the "I finished" signal; a mid-flight abort writes no row.</li>
+    <li><b><code class="i">digest_log</code></b> — what the digest <i>would</i> email (Phase-1 staging before SendGrid): <code class="i">load_state</code> (COMPLETE/PARTIAL/NO_RUN), <code class="i">load_run_id</code>, <code class="i">tables_logged</code>, <code class="i">new_rows</code>, <code class="i">refreshed_rows</code>, <code class="i">subject_line</code>.</li>
+    <li><b><code class="i">digest_task</code></b> — independent scheduled task (CRON 3:20 AM), no <code class="i">AFTER</code>. Reads the latest <code class="i">pipeline_state</code> row, rolls up its <code class="i">load_log</code> rows, classifies, composes a subject.</li>
+  </ul>
+</section>
+
+<section id="w5cost">
+  <h2 class="wk"><span class="num">W5</span> The cost story — 280× reduction</h2>
+  <p class="lead">The strongest interview beat this week — a FinOps instinct most "finished pipeline" portfolios never exercise.</p>
+  <p><code class="i">warehouse_metering_history</code> showed the load burning <b>8.4 credits/day</b> for ~13 seconds of real work per run:</p>
+  <table>
+    <tbody><tr><th>Day</th><th>Credits</th><th>Note</th></tr>
+    <tr><td>Aug 11</td><td>0.077</td><td>manual worksheet poking</td></tr>
+    <tr><td>Aug 13</td><td>0.033</td><td>manual</td></tr>
+    <tr><td>Aug 19</td><td>5.28</td><td>5-min task went live</td></tr>
+    <tr><td>Aug 20</td><td>4.12</td><td>partial day → ~8.4/day</td></tr>
+  </tbody></table>
+  <p style="margin-top:12px">Root cause: at <code class="i">5 MINUTE</code> = <b>288 runs/day</b>, each billing a <b>60s minimum</b> on resume + <b>60s AUTO_SUSPEND</b> idle after ~13s of work → <b>87% waste</b>, and 287 of 288 runs are no-ops. Fix: <code class="i">USING CRON 0 3 * * * America/Chicago</code> → 1 run/day.</p>
+  <table>
+    <tbody><tr><th>Schedule</th><th>Runs/day</th><th>Credits/day</th><th>Runway (~190 cr)</th></tr>
+    <tr><td>5 MINUTE</td><td>288</td><td>8.4</td><td>~22 days</td></tr>
+    <tr><td>1 HOUR</td><td>24</td><td>0.70</td><td>~271 days</td></tr>
+    <tr><td>Daily CRON</td><td>1</td><td>0.03</td><td>~unlimited</td></tr>
+  </tbody></table>
+  <div class="note"><b>Framing:</b> "I polled every five minutes during development for fast feedback, then measured actual consumption and matched the schedule to the data-arrival rate — cutting credits ~280×. Polling frequency should follow the data, not developer impatience." <code class="i">EXECUTE TASK</code> still runs it on demand, so daily scheduling costs nothing during dev.</div>
+</section>
+
+<section id="w5outage">
+  <h2 class="wk"><span class="num">W5</span> The Aug 19–24 GCS outage — diagnosed by elimination, self-recovered</h2>
+  <p>The pipeline began <b>failing silently on Aug 19</b>. Every <code class="i">COPY</code>: <code class="i">Failed to access remote file: access denied</code> — while <code class="i">LIST @spotify_stage</code> <b>succeeded</b>. Snowflake could list the bucket but not read object contents.</p>
+  <p>Diagnosed by ruling everything out, in order:</p>
+  <ul class="clean">
+    <li><b>Snowflake config</b> — <code class="i">DESC INTEGRATION</code> correct, integration exists. ✓ not it.</li>
+    <li><b>Bucket IAM</b> — <code class="i">get-iam-policy</code>: <code class="i">objectViewer</code> bound, no condition, no deny. That role <i>does</i> include <code class="i">storage.objects.get</code>. ✓ not it.</li>
+    <li><b>CMEK</b> — top theory (LIST reads metadata; COPY must decrypt). <code class="i">buckets describe … encryption</code> → <b>null</b>. ✗ ruled out.</li>
+    <li><b>Billing</b> — $300/$300, 60 days, not suspended. ✗ ruled out.</li>
+    <li><b>Object readable?</b> — <code class="i">gcloud storage cp</code> of the exact file <b>as myself</b> succeeded (17.8 KiB). Only the Snowflake SA's read path failed.</li>
+    <li><b>Audit logs</b> — empty (GCS data-access logging off by default).</li>
+  </ul>
+  <p style="margin-top:10px">Every layer checked out, yet COPY denied. The break coincided <b>exactly</b> with creating <code class="i">spotify_pubsub_int</code> (the Snowpipe attempt) on Aug 19 09:27 — concurrent Pub/Sub/IAM changes. <b>It then healed on its own:</b> <code class="i">pipeline_state</code> timestamps show the <b>Aug 23 &amp; Aug 24 01:00 scheduled runs both succeeded</b> (<code class="i">tables_loaded=4</code>) with no fix — a transient cross-cloud access failure that cleared after propagation. Confirmed with a manual <code class="i">EXECUTE TASK</code> on Aug 24 → SUCCEEDED, 185 songs, four fresh <code class="i">load_log</code> rows, digest read COMPLETE.</p>
+  <div class="note"><b>Framing:</b> "A storage-integration COPY started failing with access-denied while LIST worked. I diagnosed by elimination — proved it wasn't the integration config, bucket IAM, encryption, or billing, and that the object was readable by me directly — narrowing it to a transient cross-cloud access failure during concurrent IAM changes. It self-recovered, which my <code class="i">pipeline_state</code> timestamps confirmed. The lesson: a pipeline with no monitoring fails in the dark — had the digest been live, I'd have had an alert the first morning."</div>
+</section>
+
+<section id="w5dq">
+  <h2 class="wk"><span class="num">W5</span> Data-quality findings (from real data)</h2>
+  <div class="gap"><b>Dedup gap in transform.</b> One <code class="i">songs</code> CSV: <b>187 rows / 183 distinct <code class="i">song_id</code>s</b> — four tracks appear twice (identical but for <code class="i">added_at</code>) because re-adding a track to a playlist makes a second entry. <code class="i">build_songs</code> isn't deduping on <code class="i">song_id</code>. MERGE collapses it downstream (finals stay clean), but the CSV presents <code class="i">song_id</code> as a PK while holding duplicates.</div>
+  <div class="gap"><b>Null-name rows.</b> 3 rows carry empty <code class="i">name</code> + <code class="i">duration_ms=0</code> (unavailable/local tracks). Flowed to Snowflake for weeks unnoticed — a null/blank check belongs in the digest.</div>
+  <div class="gap"><b>File-count ≠ insert-count, by design.</b> A CSV is a full snapshot (~187 rows) while "new rows inserted" is ~0–3. The digest reports rows-in-file / distinct-keys / inserted / updated per table so the difference is self-explaining rather than looking broken every morning.</div>
+</section>
+
+<section id="w5email">
+  <h2 class="wk"><span class="num">W5</span> Digest email — Phases 3 &amp; 4 (SHIPPED end-to-end)</h2>
+  <p class="lead">The digest is now a live daily email, not just a log row. Proven end-to-end Aug 25 — delivered with <b>SPF pass + DKIM pass</b>.</p>
+  <pre>Cloud Scheduler (3:20 AM Central) → HTTP+OIDC → Cloud Function spotify-digest
+   → reads Secret Manager (snowflake_key, sendgrid_api_key)
+   → Snowflake HEADLESS (key-pair, no browser/Duo) → pipeline_state + load_log
+   → GCS processed/ (JSON lines) + transformed_data/ latest CSVs (rows)
+   → HTML + subject → SendGrid → inbox</pre>
+  <ul class="clean">
+    <li><b>Headless auth</b> — RSA key-pair (PKCS#8). Public half registered on <code class="i">PINTU</code> (<code class="i">ALTER USER … SET RSA_PUBLIC_KEY</code>, <code class="i">HAS_KEYPAIR=true</code>); the function signs a JWT with the private key, Snowflake verifies against the public. No shared secret; MFA bypassed. Proven with a local <code class="i">SELECT CURRENT_USER()</code> before any function code.</li>
+    <li><b>Secrets</b> — <code class="i">snowflake_key.p8</code> + SendGrid API key in Secret Manager, never in code/repo (<code class="i">*.p8</code> gitignored). Runtime SA granted <code class="i">secretAccessor</code> on only those two + <code class="i">run.invoker</code> + existing <code class="i">objectAdmin</code>. Least privilege.</li>
+    <li><b>Dual-mode <code class="i">main.py</code></b> — <code class="i">RUNTIME</code> env var: unset → reads local <code class="i">.p8</code>, writes <code class="i">digest_preview.html</code>; <code class="i">=cloud</code> → Secret Manager + SendGrid. Logic proven on the laptop before deploy.</li>
+    <li><b>Account gotcha</b> — one account, three ids: <code class="i">GIHJUIA-ZR03463</code> (connector, works), <code class="i">PAPZGUL-NT81381</code> (stale, fails JWT), <code class="i">PW76915</code> (locator). Use the one proven to connect.</li>
+  </ul>
+  <div class="note"><b>Framing:</b> "I made the pipeline self-reporting — a daily Cloud Function connects to Snowflake headlessly with key-pair auth, reads the run and the GCS artifacts, and emails an HTML digest via SendGrid, scheduled with authenticated OIDC. Secrets in Secret Manager, least-privilege SA, every layer proven locally before deploy."</div>
+</section>
+
+<section id="w5war">
+  <h2 class="wk"><span class="num">W5</span> Debugging War Stories 25–33</h2>
+  <div class="war"><span class="n">25</span><b>NOT-MATCHED-only MERGE has no "rows updated" column.</b> The bridge capture failed with <code class="i">invalid identifier '"number of rows updated"'</code> — a MERGE's result set only has columns for the clauses present, and the bridge has only <code class="i">WHEN NOT MATCHED</code>. Fix: hardcode <code class="i">0</code>. <span class="lesson">Loud failure — named the line/column; ~20 min.</span></div>
+  <div class="war"><span class="n">26</span><b><code class="i">CREATE OR REPLACE TASK</code> always lands suspended.</b> Sequence: REPLACE → <code class="i">RESUME</code> → <code class="i">EXECUTE TASK</code>. <span class="lesson">Verify with GET_DDL AND SHOW TASKS — not the absence of an error.</span></div>
+  <div class="war"><span class="n">27</span><b>Ctrl+A worksheet contamination.</b> Ctrl+A selects the whole worksheet — smuggled a stray <code class="i">GET_DDL</code> into the task body. <span class="lesson">Task defs in their own worksheet; verification queries in a scratch worksheet.</span></div>
+  <div class="war hot"><span class="n">28</span><b>Silent <code class="i">LET … := (SELECT …)</code> binding failure — the nastiest.</b> Returned <b>null</b> with no error; task SUCCEEDED, column silently null. Fix: inline <code class="i">LAST_QUERY_ID()</code>. <span class="lesson">Loud failures cost an hour; silent failures ship wrong data. Verify the state, don't trust the silence.</span></div>
+  <div class="war"><span class="n">29</span><b><code class="i">SYSTEM$TASK_RUNTIME_INFO('…GRAPH_RUN_GROUP_ID')</code> is null under EXECUTE TASK.</b> A key that only populates on the scheduled run can't be verified in dev. <span class="lesson">Chose <code class="i">LAST_QUERY_ID()</code> (always available).</span></div>
+  <div class="war"><span class="n">30</span><b>Hand-transcribing an RSA key dropped 6 chars.</b> The public key lost its trailing <code class="i">IDAQAB</code> (exponent block) → <code class="i">Invalid Public key</code>. <span class="lesson">Never hand-transcribe — pipe it: <code class="i">grep -v "PUBLIC KEY" key.pub | tr -d '\n'</code>.</span></div>
+  <div class="war"><span class="n">31</span><b><code class="i">JWT token is invalid</code> = account identifier, not the key.</b> First headless attempt passed the wrong account id; the connection reached Snowflake but the JWT issuer was rejected. <span class="lesson">A reached-but-rejected auth is an identifier problem, not network/key.</span></div>
+  <div class="war"><span class="n">32</span><b><code class="i">printf</code> secret upload failed silently in PowerShell.</b> Unix command in PowerShell → not stored, and the key had been exposed. <span class="lesson">Use a temp file + <code class="i">Remove-Item</code>; regenerate any key that touched a shell/chat.</span></div>
+  <div class="war"><span class="n">33</span><b>gen2 Cloud Function needs <code class="i">run.invoker</code> for OIDC.</b> Scheduler → authenticated function returned 403 until the SA got <code class="i">run.invoker</code> on the Cloud Run service (gen2 functions ARE Cloud Run). <span class="lesson"><code class="i">--no-allow-unauthenticated</code> means even your own scheduler must be granted invoke.</span></div>
+</section>
+
+<section id="war">
+  <h2><span class="num">09</span> War Stories 1–24 (earlier weeks)</h2>
+  <p class="lead">Condensed; full text in the Markdown TDD.</p>
+  <div class="war"><span class="n">20</span><b>Snowpipe Pub/Sub bind failure (unresolved; pivoted).</b> Built the full event path; <code class="i">CREATE PIPE … AUTO_INGEST=TRUE</code> repeatedly failed <code class="i">PERMISSION_DENIED</code> despite every IAM grant verified. Root cause never found → pivoted to a scheduled COPY task. <span class="lesson">Same outcome; can discuss event-driven vs batch.</span></div>
+  <div class="war"><span class="n">21</span><b>Task SUCCEEDED but tables re-duplicated.</b> Finals held dupes from earlier <code class="i">FORCE=TRUE</code> loads — MERGE dedups the source, not rows already in the target. <span class="lesson">MERGE keeps a target clean only if it started clean.</span></div>
+  <div class="war"><span class="n">19</span><b>Regex PATTERN substring bug.</b> <code class="i">.*artists_.*</code> also matched <code class="i">song_artists_…</code>. Fix: anchor with a path separator <code class="i">.*/artists_.*</code>.</div>
+  <div class="war"><span class="n">16</span><b>Storage-trigger infinite loop (prevented).</b> The transform writes to the bucket it watches; a <code class="i">startswith("raw_data/to_process/")</code> guard rejects its own 5 self-events/run.</div>
+  <p class="lead" style="margin-top:10px">…plus #1–18, 22–24 (PowerShell UTF-16, auth-flow migration, credential rotation, false-pass cache test, Eventarc IAM, Snowsight cursor-run, BEGIN…END parse, SA-reuse) — see Markdown.</p>
+</section>
+
+
+<div class="wkbanner">
+  <h3>Week 6 — Snowflake Analytics → BigQuery → Looker Studio</h3>
+  <p>Session 10 · Aug 25 · consumer-first BI design, source profiling, curated Snowflake views, BigQuery readiness</p>
+</div>
+
+<section id="w6">
+  <h2 class="wk"><span class="num">W6</span> Session 10 — verified outcome</h2>
+  <p>This session moved the project from “pipeline with clean tables” to a defined analytics product. Two curated Snowflake views now exist and pass grain, uniqueness, and relationship checks. BigQuery and Looker Studio remain planned; no BigQuery resources were created during this session.</p>
+  <table>
+    <tbody><tr><th>Layer</th><th>Status</th><th>Evidence</th></tr>
+    <tr><td>Snowflake source tables</td><td>VERIFIED</td><td>194 songs, 139 albums, 207 artists, 490 song–artist relationships; keys and foreign-key relationships profiled.</td></tr>
+    <tr><td><code class="i">ANALYTICS.VW_SONG_CATALOG</code></td><td>CREATED + VALIDATED</td><td>194 rows, 194 unique song IDs, 0 missing artist aggregations, 0 missing albums.</td></tr>
+    <tr><td><code class="i">ANALYTICS.VW_ARTIST_SUMMARY</code></td><td>CREATED + VALIDATED</td><td>207 rows, 207 unique artists, 490 artist-song relationships, 0 artists without songs.</td></tr>
+    <tr><td>BigQuery dataset</td><td>NOT CREATED</td><td>First checkpoint prepared: verify active project, bucket location, and BigQuery API before choosing an immutable dataset location.</td></tr>
+    <tr><td>Looker Studio dashboard</td><td>NOT CREATED</td><td>Consumer, questions, pages, metrics, and source models defined.</td></tr>
+  </tbody></table>
+  <div class="note"><b>Accuracy rule:</b> “planned,” “created,” “validated,” and “deployed” are different states. Interview claims in this document use only the strongest state supported by evidence.</div>
+</section>
+
+<section id="w6inventory">
+  <h2 class="wk"><span class="num">W6</span> Exact environment and object inventory</h2>
+  <table>
+    <tbody><tr><th>Object</th><th>Exact name</th><th>Verified state / purpose</th></tr>
+    <tr><td>Snowflake account locator</td><td><code class="i">PW76915</code></td><td>Account locator observed in session.</td></tr>
+    <tr><td>Snowflake user</td><td><code class="i">PINTU</code></td><td>Existing pipeline user.</td></tr>
+    <tr><td>Initial active role</td><td><code class="i">ACCOUNTADMIN</code></td><td>Used only to inspect ownership and delegate database privilege.</td></tr>
+    <tr><td>Worksheet warehouse observed</td><td><code class="i">COMPUTE_WH</code></td><td>Current worksheet context at inspection time.</td></tr>
+    <tr><td>Pipeline warehouse</td><td><code class="i">SPOTIFY_WH</code></td><td>Existing pipeline warehouse documented in the repository/TDD.</td></tr>
+    <tr><td>Database</td><td><code class="i">SPOTIFY_DB</code></td><td>Owned by <code class="i">ACCOUNTADMIN</code>.</td></tr>
+    <tr><td>Raw schema</td><td><code class="i">SPOTIFY_DB.RAW</code></td><td>Owned by <code class="i">ACCOUNTADMIN</code>; contains source, staging, stage, tasks, and monitoring objects.</td></tr>
+    <tr><td>Analytics schema</td><td><code class="i">SPOTIFY_DB.ANALYTICS</code></td><td>Created by the user; owner <code class="i">SYSADMIN</code>; comment: “Curated BI views for BigQuery and Looker Studio.”</td></tr>
+    <tr><td>Curated views</td><td><code class="i">VW_SONG_CATALOG</code>, <code class="i">VW_ARTIST_SUMMARY</code></td><td>Both created and validated.</td></tr>
+    <tr><td>GCP project</td><td><code class="i">python-gcp-snowflake</code></td><td>Expected project; read-only verification is the next step.</td></tr>
+    <tr><td>GCS bucket</td><td><code class="i">spotify-etl-preetham</code></td><td>Existing raw/transformed storage; location must be verified before creating the BigQuery dataset.</td></tr>
+    <tr><td>Proposed BigQuery dataset</td><td><code class="i">spotify_analytics</code></td><td>Proposed only; not created.</td></tr>
+  </tbody></table>
+  <div class="note"><b>Dedicated Looker Snowflake user/warehouse:</b> no direct Looker-to-Snowflake connection is planned now. Looker Studio will connect to BigQuery. A least-privilege Snowflake export role/user/warehouse should be designed later for the Snowflake→BigQuery synchronization job instead of exposing <code class="i">ACCOUNTADMIN</code> or the general pipeline user.</div>
+</section>
+
+<section id="w6decisions">
+  <h2 class="wk"><span class="num">W6</span> BI architecture decisions and reasoning</h2>
+  <table>
+    <tbody><tr><th>Decision</th><th>Choice</th><th>Reason / trade-off</th></tr>
+    <tr><td>System of record</td><td>Snowflake</td><td>Existing pipeline, normalization, and data-quality logic terminate there. BigQuery is a serving copy, not a second source of truth.</td></tr>
+    <tr><td>BI connection</td><td>Looker Studio → BigQuery natively</td><td>Adds market-relevant BigQuery experience and keeps dashboard queries off the ingestion warehouse.</td></tr>
+    <tr><td>Published objects</td><td>Curated analytics models, not raw tables</td><td>Consumers should not rebuild bridge joins, grain rules, or duration/release-year calculations.</td></tr>
+    <tr><td>Dashboard behavior on sync failure</td><td>Remain available with stale data</td><td>Availability is preferred over a blank dashboard. Show <code class="i">last_successful_refresh_at</code> and a stale warning.</td></tr>
+    <tr><td>Automatic retry</td><td>No automatic retry initially</td><td>Fail once, alert by email/indicator, investigate, fix, and manually rerun. This avoids repeated bad loads and retry storms while the workflow is small.</td></tr>
+    <tr><td>Idempotency</td><td>Batch ID + deterministic keys + MERGE/atomic publication</td><td>A batch ID provides lineage, while the business key prevents duplicate target rows if the same batch is rerun.</td></tr>
+    <tr><td>Current implementation strategy</td><td>Atomic full refresh for the tiny curated models</td><td>At 194 songs, it is simplest to validate. Load staging tables, validate them, then replace/publish so failure leaves the previous good tables available.</td></tr>
+    <tr><td>Scale strategy</td><td>Incremental MERGE when operational thresholds justify it</td><td>At 100M rows with 1M daily changes, only 1% changes; rewriting 99M unchanged rows wastes scan, transfer, time, and money.</td></tr>
+  </tbody></table>
+  <p><b>Measurable triggers for moving from full refresh to incremental:</b></p>
+  <ul class="clean">
+    <li>Full refresh no longer completes inside the agreed load window or dashboard freshness SLA.</li>
+    <li>Daily bytes scanned/transferred or compute cost exceeds an agreed budget while the changed-row percentage stays low.</li>
+    <li>Refresh volume creates operational side effects such as load failures, quota pressure, long table unavailability, or excessive downstream cache invalidation.</li>
+  </ul>
+</section>
+
+<section id="w6profiling">
+  <h2 class="wk"><span class="num">W6</span> Source profiling and data-quality evidence</h2>
+  <h3>Final-table grain and keys</h3>
+  <table>
+    <tbody><tr><th>Table</th><th>Rows</th><th>Distinct key</th><th>Null key</th><th>Duplicate key rows</th></tr>
+    <tr><td>SONGS</td><td>194</td><td>194</td><td>0</td><td>0</td></tr>
+    <tr><td>ALBUMS</td><td>139</td><td>139</td><td>0</td><td>0</td></tr>
+    <tr><td>ARTISTS</td><td>207</td><td>207</td><td>0</td><td>0</td></tr>
+    <tr><td>SONG_ARTISTS</td><td>490</td><td>490 composite keys</td><td>0</td><td>0</td></tr>
+  </tbody></table>
+  <p>All six referential-integrity checks returned zero: songs with null album ID, songs with missing album, bridge rows with missing song, bridge rows with missing artist, albums without songs, and artists without song links.</p>
+  <h3>Staging-table profile</h3>
+  <table>
+    <tbody><tr><th>Table</th><th>Staging rows</th><th>Distinct key</th><th>Repeated rows</th></tr>
+    <tr><td>SONGS_STAGING</td><td>2,784</td><td>194</td><td>2,590</td></tr>
+    <tr><td>ALBUMS_STAGING</td><td>1,978</td><td>139</td><td>1,839</td></tr>
+    <tr><td>ARTISTS_STAGING</td><td>2,907</td><td>207</td><td>2,700</td></tr>
+    <tr><td>SONG_ARTISTS_STAGING</td><td>6,749</td><td>490</td><td>6,259</td></tr>
+  </tbody></table>
+  <p>The staging tables retain repeated full snapshots. They must not be interpreted at current entity grain without deduplication.</p>
+  <h3>Latest playlist file versus final table</h3>
+  <table>
+    <tbody><tr><th>Measure</th><th>Result</th></tr>
+    <tr><td>Latest transformed songs file</td><td><code class="i">songs_20260825_070027.csv</code> · 19,515 bytes · Aug 25 07:00:32 GMT</td></tr>
+    <tr><td>Rows in latest file</td><td>196</td></tr>
+    <tr><td>Distinct song IDs in latest file</td><td>193</td></tr>
+    <tr><td>Distinct songs in final table</td><td>194</td></tr>
+    <tr><td>Final songs absent from latest file</td><td>1</td></tr>
+    <tr><td>Latest-file songs absent from final table</td><td>0</td></tr>
+  </tbody></table>
+  <p>Repeated latest-snapshot song IDs: <code class="i">2r1CHpKRDdzHGJScn5UqjX</code> (Dil Chahta Hai), <code class="i">46elU7IBKWf55D5sjHGqO7</code> (Dil Dhadakne Do), and <code class="i">7jvk8xmmSANi6qpKoLXtQG</code> (blank name in the inspected result). Each appeared twice with different <code class="i">added_at</code> timestamps.</p>
+  <p>The one retained historical song was <code class="i">6YycppSAeGtSvwmu8qCcr2</code> (In Dino), added at <code class="i">2020-09-28 14:40:08</code>. It exists in the accumulated catalog but not in the latest playlist file.</p>
+</section>
+
+<section id="w6views">
+  <h2 class="wk"><span class="num">W6</span> Curated Snowflake analytics views</h2>
+  <div class="card">
+    <p><b><code class="i">SPOTIFY_DB.ANALYTICS.VW_SONG_CATALOG</code></b></p>
+    <p><b>Declared grain:</b> one row per unique song observed by the pipeline—not exact current playlist membership.</p>
+    <p><b>Business fields:</b> song ID/name, duration in seconds, explicit flag, track number, added date/time, album attributes, release year, aggregated artist names, and artist count.</p>
+    <p><b>Validation:</b> 194 rows · 194 unique songs · 0 songs without artist names · 0 songs without albums.</p>
+  </div>
+  <div class="card">
+    <p><b><code class="i">SPOTIFY_DB.ANALYTICS.VW_ARTIST_SUMMARY</code></b></p>
+    <p><b>Declared grain:</b> one row per artist, with catalog-level song metrics.</p>
+    <p><b>Metrics:</b> distinct song count, distinct album count, average duration, explicit song count/percentage, first song-added timestamp, latest song-added timestamp.</p>
+    <p><b>Validation:</b> 207 rows · 207 unique artists · 490 artist-song relationships · 0 artists without songs.</p>
+  </div>
+  <table>
+    <tbody><tr><th>Top artist</th><th>Song count</th><th>Album count</th></tr>
+    <tr><td>Vishal-Shekhar</td><td>23</td><td>11</td></tr>
+    <tr><td>Pritam</td><td>20</td><td>14</td></tr>
+    <tr><td>A.R. Rahman</td><td>15</td><td>9</td></tr>
+    <tr><td>Vishal Dadlani</td><td>15</td><td>14</td></tr>
+    <tr><td>KK</td><td>11</td><td>9</td></tr>
+    <tr><td>Sachin-Jigar</td><td>11</td><td>8</td></tr>
+    <tr><td>Shreya Ghoshal</td><td>11</td><td>11</td></tr>
+    <tr><td>Shankar-Ehsaan-Loy</td><td>10</td><td>6</td></tr>
+    <tr><td>Shaan</td><td>9</td><td>9</td></tr>
+    <tr><td>Sukhwinder Singh</td><td>9</td><td>9</td></tr>
+  </tbody></table>
+  <div class="note"><b>Visualization rule:</b> use a ranked bar chart for song count by artist. Do not use a pie chart implying mutually exclusive ownership: collaborative songs contribute to more than one artist, so artist counts overlap.</div>
+</section>
+
+<section id="w6consumer">
+  <h2 class="wk"><span class="num">W6</span> Consumer, analytical questions, and dashboard contract</h2>
+  <p><b>Primary consumer:</b> a playlist/content analyst who wants to understand and maintain the observed Spotify catalog. <b>Secondary consumer:</b> the data engineering team monitoring publication freshness and data quality.</p>
+  <table>
+    <tbody><tr><th>Dashboard page</th><th>Question answered</th><th>Decision supported</th></tr>
+    <tr><td>Catalog Overview</td><td>How many songs, artists, and albums exist? What are duration, explicit-content, and release-year distributions?</td><td>Understand catalog shape and whether it matches the intended content strategy.</td></tr>
+    <tr><td>Artist Analysis</td><td>Which artists appear most often and across how many albums?</td><td>Assess artist concentration and identify opportunities to diversify.</td></tr>
+    <tr><td>Album Analysis</td><td>Which albums and release periods dominate?</td><td>Balance eras and reduce album concentration if required.</td></tr>
+    <tr><td>Song Explorer</td><td>Which individual records match an artist, album, year, explicit flag, or added-date filter?</td><td>Investigate and curate specific items.</td></tr>
+    <tr><td>Data Freshness</td><td>When did the last successful publication finish, and is the copy stale?</td><td>Decide whether the analytical results are trustworthy enough to use.</td></tr>
+  </tbody></table>
+  <p><b>Initial KPIs:</b> unique songs, artists, albums, average duration, explicit-song percentage, last successful refresh, and stale status.</p>
+</section>
+
+<section id="w6membership">
+  <h2 class="wk"><span class="num">W6</span> Critical model limitation and future fact table</h2>
+  <div class="gap"><b>Current limitation:</b> <code class="i">RAW.SONGS</code> represents one row per unique song retained across observed loads. It does not prove exact current playlist membership. The latest file can contain the same song more than once, while the MERGE target can retain a song removed from the latest playlist.</div>
+  <p>Therefore the first dashboard must be labeled <b>“Spotify playlist catalog observed by the pipeline”</b>, not “exact current playlist.”</p>
+  <p>A future membership fact should use this grain:</p>
+  <pre>PLAYLIST_ID + SNAPSHOT_ID + POSITION → one playlist occurrence
+columns: playlist_id, snapshot_id, position, song_id, added_at, extracted_at</pre>
+  <ul class="clean">
+    <li><code class="i">snapshot_id</code> is Spotify’s source version identifier.</li>
+    <li><code class="i">extracted_at</code> records when the pipeline observed that version.</li>
+    <li><code class="i">position</code> distinguishes repeated occurrences of the same song.</li>
+    <li>This enables additions/removals between snapshots, current membership, position change, and playlist growth analysis.</li>
+  </ul>
+  <div class="note"><b>Deferred code experiment:</b> the user added a local <code class="i">get_playlist_snapshot_id()</code> helper and call in <code class="i">main.py</code>; Python syntax validation returned “Syntax OK.” It remains uncommitted and undeployed, so it is not claimed as shipped functionality.</div>
+</section>
+
+<section id="w6errors">
+  <h2 class="wk"><span class="num">W6</span> Real errors, root causes, fixes, and prevention</h2>
+  <div class="war"><span class="n">34</span><b>Join fan-out inflated “final” counts.</b> A full-outer-join profiling query returned 2,784 songs, 1,978 albums, 2,907 artists, and 6,749 bridge rows. Those were not final-table counts; joining one-to-many staging snapshots multiplied rows. <span class="lesson">Fix: profile each table independently at its declared key/grain before joining. Prevention: state the expected grain beside every validation query.</span></div>
+  <div class="war"><span class="n">35</span><b><code class="i">LIST</code> timestamps sorted by weekday text.</b> Snowflake returned <code class="i">last_modified</code> as text, so DESC ordering produced weekday-alphabetical results rather than chronological results. <span class="lesson">Fix: remove “ GMT” and parse with <code class="i">TRY_TO_TIMESTAMP_NTZ(..., 'DY, DD MON YYYY HH24:MI:SS')</code>. Prevention: inspect types before ordering date-looking values.</span></div>
+  <div class="war"><span class="n">36</span><b><code class="i">RESULT_SCAN(LAST_QUERY_ID())</code> scanned the wrong result.</b> A five-row SELECT was run after LIST, so LAST_QUERY_ID pointed to that SELECT—not the LIST output. <span class="lesson">Fix: run LIST immediately before RESULT_SCAN or capture the required query ID explicitly. Prevention: treat LAST_QUERY_ID as an exact statement pointer, not session memory.</span></div>
+  <div class="war hot"><span class="n">37</span><b>Duplicated external-stage path returned zero rows without an error.</b> The stage URL already ended at <code class="i">transformed_data/</code>; querying <code class="i">@stage/transformed_data/file</code> repeated the folder. <span class="lesson">Fix: use <code class="i">@SPOTIFY_DB.RAW.SPOTIFY_STAGE/songs_20260825_070027.csv</code>. Prevention: validate source-row count &gt; 0 before publication; retain the previous target and alert if validation fails.</span></div>
+  <div class="war"><span class="n">38</span><b>Entity deduplication hid playlist occurrences.</b> Three songs occurred twice in the latest snapshot with different added timestamps; MERGE correctly produced one entity row but could not preserve both playlist positions. <span class="lesson">Fix requires a separate occurrence fact keyed by playlist + snapshot + position—not weakening the SONGS primary key.</span></div>
+  <div class="war"><span class="n">39</span><b>Learning workflow correction in Git.</b> Three remotely prepared implementation commits were reverted so the user could implement and understand each change personally. The feature branch retained the architecture documentation. <span class="lesson">For an interview portfolio, authorship includes being able to explain and reproduce the change, not merely having code in the repository.</span></div>
+</section>
+
+<section id="w6qa">
+  <h2 class="wk"><span class="num">W6</span> Interview questions and model answers</h2>
+  <div class="qa-sess">Data modeling</div>
+  <details class="qa" open=""><summary><span class="q">Q</span> Why can a table have a valid primary key but invalid foreign-key relationships?<span class="chev">›</span></summary><div class="a">A primary key proves only that rows in that table have unique, non-null identifiers. A foreign key tests whether a referenced parent exists in another table. A SONG row can have a unique SONG_ID but an ALBUM_ID that has no matching ALBUM row. In standard Snowflake tables, PK/FK constraints are generally informational rather than enforced, so the pipeline must validate referential integrity.</div></details>
+  <details class="qa"><summary><span class="q">Q</span> Why did joining the staging tables inflate the counts?<span class="chev">›</span></summary><div class="a">Each staging table contained many historical full snapshots. Joining repeated rows across one-to-many relationships created a multiplicative fan-out. Correct profiling starts by counting each table at its declared key, then joins only deduplicated inputs when relationship analysis is required.</div></details>
+  <details class="qa"><summary><span class="q">Q</span> Why can’t the top-ten artist counts be divided directly by 194 songs?<span class="chev">›</span></summary><div class="a">Songs can have multiple artists. The 490 bridge rows are artist-song relationships, so artist song counts overlap. Summing artist counts does not produce distinct songs. Use a ranked bar chart or calculate a clearly defined relationship share.</div></details>
+  <details class="qa"><summary><span class="q">Q</span> What is the difference between snapshot_id and extracted_at?<span class="chev">›</span></summary><div class="a"><code class="i">snapshot_id</code> is the source-system version of the playlist; <code class="i">extracted_at</code> is when this pipeline observed it. The same snapshot on two extraction dates means the playlist did not change between observations.</div></details>
+  <div class="qa-sess">Architecture and reliability</div>
+  <details class="qa"><summary><span class="q">Q</span> Why keep Snowflake as source of truth while serving Looker Studio from BigQuery?<span class="chev">›</span></summary><div class="a">Snowflake already owns the ingestion, normalization, and validated business logic. BigQuery is a purpose-built serving copy for native Looker Studio access and portfolio experience. Declaring one source of truth prevents conflicting corrections and definitions across warehouses.</div></details>
+  <details class="qa"><summary><span class="q">Q</span> What happens if Snowflake→BigQuery synchronization fails?<span class="chev">›</span></summary><div class="a">The dashboard keeps the last successfully published tables available, shows the last successful refresh time, and marks them stale. The job fails and alerts; a developer investigates and manually reruns it. A failed batch must never replace the last known-good target.</div></details>
+  <details class="qa"><summary><span class="q">Q</span> How do you prevent a rerun from duplicating BigQuery rows?<span class="chev">›</span></summary><div class="a">Assign a batch ID for lineage, validate deterministic business keys, and publish with an idempotent MERGE or atomic staged replacement. Batch ID alone records which run produced a row; uniqueness/MERGE logic is what prevents duplicate business records.</div></details>
+  <details class="qa"><summary><span class="q">Q</span> Why not full-refresh 100 million rows when only 1 million change daily?<span class="chev">›</span></summary><div class="a">Only 1% changes. Incremental loading processes that 1% instead of repeatedly scanning, transferring, and rewriting the unchanged 99%, improving cost and the chance of meeting the freshness SLA.</div></details>
+  <details class="qa"><summary><span class="q">Q</span> What decision does the artist-concentration dashboard support?<span class="chev">›</span></summary><div class="a">A playlist analyst can determine whether a few artists dominate the catalog and decide whether to diversify with underrepresented artists, subject to the playlist’s audience and content strategy.</div></details>
+</section>
+
+<section id="next">
+  <h2><span class="num">11</span> Open Items / Next Steps</h2>
+  <ol class="steps">
+    <li><b>Verify BigQuery prerequisites without changing resources:</b> confirm active project <code class="i">python-gcp-snowflake</code>, inspect <code class="i">gs://spotify-etl-preetham</code> location, and confirm <code class="i">bigquery.googleapis.com</code> is enabled.</li>
+    <li><b>Create the BigQuery dataset:</b> after location verification, create proposed dataset <code class="i">spotify_analytics</code> in the compatible region. Dataset location is immutable, so verification comes first.</li>
+    <li><b>Design least-privilege synchronization identity:</b> create a dedicated Snowflake export role/user/warehouse only after defining the transfer mechanism; do not use <code class="i">ACCOUNTADMIN</code>.</li>
+    <li><b>Implement atomic initial publication:</b> copy curated <code class="i">song_catalog</code> and <code class="i">artist_summary</code> into BigQuery staging, validate nonzero row count/unique keys, then publish without replacing the prior good data on failure.</li>
+    <li><b>Add refresh metadata:</b> batch ID, source extraction/snapshot identifier when available, publication start/end, row counts, status, and <code class="i">last_successful_refresh_at</code>.</li>
+    <li><b>Connect Looker Studio:</b> build Catalog Overview, Artist Analysis, Song Explorer, and Data Freshness pages from reusable BigQuery sources.</li>
+    <li><b>Model exact playlist membership later:</b> implement <code class="i">PLAYLIST_TRACKS</code> at playlist + snapshot + position grain before claiming current-membership or change-over-time analytics.</li>
+    <li><b>Git hygiene:</b> review the local uncommitted snapshot helper, decide whether to continue or defer it, and commit only code the user has implemented, tested, and can explain.</li>
+  </ol>
+  <div class="note"><b>Resume checkpoint:</b> run the three prepared read-only GCP checks first. No BigQuery dataset, synchronization job, service account, Looker Studio source, or dashboard exists yet.</div>
+</section>
+
+<section id="constraints">
+  <h2><span class="num">12</span> Confirmed Constraints</h2>
+  <ul class="clean">
+    <li><b>Snowflake trial</b> — GCP / us-central1. ~200 credits, ~9.5 used; the 5-min task briefly burned 8.4/day before the daily-CRON fix. Credits expire before the calendar (~Sep 12 vs ~Sep 18).</li>
+    <li><b>GCP free trial</b> — $300 credit, ~$0 used, expires Oct 22, 2026. (Verified healthy during the W5.4 outage.)</li>
+    <li><b>Snowflake objects</b> — <code class="i">spotify_wh</code>, <code class="i">spotify_db.raw</code>, 4 final + 4 staging, <code class="i">spotify_gcs_int</code>, <code class="i">spotify_stage</code>, <code class="i">spotify_csv_format</code>, <code class="i">load_spotify_task</code> (daily 3 AM), <code class="i">digest_task</code> (daily 3:20 AM), + <code class="i">load_log</code> / <code class="i">pipeline_state</code> / <code class="i">digest_log</code>. <code class="i">PINTU</code> has key-pair auth (<code class="i">HAS_KEYPAIR=true</code>). Connector id <code class="i">GIHJUIA-ZR03463</code>.</li>
+    <li><b>GCP digest stack</b> — Cloud Function <code class="i">spotify-digest</code> (gen2, python312, <code class="i">RUNTIME=cloud</code>) · Cloud Scheduler <code class="i">spotify-digest-daily</code> (3:20 AM Central, HTTP+OIDC) · Secret Manager <code class="i">snowflake_key</code> + <code class="i">sendgrid_api_key</code> · SendGrid verified sender. Runtime SA: <code class="i">secretAccessor</code> (2 secrets) + <code class="i">run.invoker</code> + <code class="i">objectAdmin</code>.</li>
+    <li><b>Deployed functions</b> — <code class="i">extract-spotify</code> (gen2, HTTP, 2 AM) · <code class="i">transform-spotify</code> (gen2, GCS finalize) · <code class="i">spotify-digest</code> (gen2, scheduled 3:20 AM).</li>
+    <li><b>Pipeline status:</b> ingestion is COMPLETE + INSTRUMENTED + SELF-REPORTING. Snowflake analytics foundation is created and validated (<code class="i">ANALYTICS.VW_SONG_CATALOG</code>, <code class="i">ANALYTICS.VW_ARTIST_SUMMARY</code>). BigQuery publication and Looker Studio dashboard are not yet created. Remaining after BI: exact playlist-membership fact and optional ML recommender.</li>
+  </ul>
+</section>
+
+</main>
+</div>
+
+<footer>
+  <b>Spotify → GCP → Snowflake → BigQuery → Looker Studio</b> — Technical Design Document and interview-prep logbook. This updated output preserves the original document and adds the verified Session 10 analytics work. · Last updated Aug 25, 2026 (Session 10).
+</footer>
+
+
+
+</body></html>
